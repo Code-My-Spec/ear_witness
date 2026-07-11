@@ -87,10 +87,16 @@ jobs:
         run: |
           set -euo pipefail
           APP="_build/prod/EarWitness.app"
+          # Recursively verifies nested code + the bundle seal.
           codesign --verify --verbose "$APP"
-          # No dylib/NIF may have an invalid signature (would SIGKILL on Tahoe).
-          find "$APP" \( -name '*.so' -o -name '*.dylib' \) -print0 \
-            | xargs -0 -I{} sh -c 'codesign -v "{}" || { echo "INVALID: {}"; exit 1; }'
+          # Belt-and-suspenders: no dylib/NIF may have an invalid signature
+          # (Tahoe SIGKILLs those on load). Loop via process substitution so a
+          # failure sticks and the giant precompiled-dep paths don't overflow xargs.
+          bad=0
+          while IFS= read -r -d '' f; do
+            codesign -v "$f" 2>/dev/null || { echo "INVALID: $f"; bad=1; }
+          done < <(find "$APP" \( -name '*.so' -o -name '*.dylib' \) -print0)
+          [ "$bad" -eq 0 ]
 
       - name: Upload installer artifact
         uses: actions/upload-artifact@v4
