@@ -23,6 +23,9 @@ defmodule EarWitnessWeb.Application do
 
     {:ok, sup} = Supervisor.start_link([EarWitness.Repo], name: __MODULE__, strategy: :one_for_one)
     EarWitness.Repo.initialize()
+    # Bring the schema up before anything that queries it (the LiveView pages,
+    # Oban) starts — releases have no separate `mix ecto.migrate` step.
+    EarWitness.Repo.migrate()
 
     {:ok, _} = Supervisor.start_child(sup, EarWitnessWeb.Sup)
 

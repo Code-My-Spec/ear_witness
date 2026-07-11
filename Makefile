@@ -5,12 +5,29 @@ WHISPER_LIB = $(WHISPER_BUILD)/src/libwhisper.a
 WHISPER_REPO = https://github.com/ggml-org/whisper.cpp.git
 WHISPER_TAG = v1.9.1
 CXXFLAGS = -fPIC -I$(ERTS_INCLUDE_DIR) -I$(WHISPER_DIR)/include -I$(WHISPER_DIR)/ggml/include -std=c++17
-LDFLAGS = -dynamiclib -undefined dynamic_lookup \
-	-L$(WHISPER_BUILD)/src \
-	-L$(WHISPER_BUILD)/ggml/src \
-	-L$(WHISPER_BUILD)/ggml/src/ggml-blas \
-	-lwhisper -lggml -lggml-cpu -lggml-blas -lggml-base \
-	-framework Accelerate -framework Foundation
+
+# Per-OS link + build configuration. macOS uses the Accelerate BLAS backend
+# (ggml enables it automatically) and needs -undefined dynamic_lookup so the
+# emulator resolves enif_* symbols at load time; Linux/Windows build ggml
+# CPU-only (no hard OpenBLAS dependency) and a plain -shared leaves the enif_*
+# symbols undefined for the emulator to resolve. Static link order matters:
+# ggml-blas must precede ggml-base (it depends on its symbols).
+UNAME_S := $(shell uname -s)
+ifeq ($(UNAME_S),Darwin)
+  PLATFORM_LDFLAGS = -dynamiclib -undefined dynamic_lookup
+  WHISPER_LIB_DIRS = -L$(WHISPER_BUILD)/src -L$(WHISPER_BUILD)/ggml/src -L$(WHISPER_BUILD)/ggml/src/ggml-blas
+  WHISPER_LIBS = -lwhisper -lggml -lggml-cpu -lggml-blas -lggml-base
+  PLATFORM_LIBS = -framework Accelerate -framework Foundation
+  WHISPER_CMAKE_EXTRA =
+else
+  PLATFORM_LDFLAGS = -shared -fPIC
+  WHISPER_LIB_DIRS = -L$(WHISPER_BUILD)/src -L$(WHISPER_BUILD)/ggml/src
+  WHISPER_LIBS = -lwhisper -lggml -lggml-cpu -lggml-base
+  PLATFORM_LIBS =
+  WHISPER_CMAKE_EXTRA = -DGGML_BLAS=OFF
+endif
+
+LDFLAGS = $(PLATFORM_LDFLAGS) $(WHISPER_LIB_DIRS) $(WHISPER_LIBS) $(PLATFORM_LIBS)
 
 PROJECT = nif
 BUILDDIR = priv
@@ -23,6 +40,7 @@ $(info ERTS_INCLUDE_DIR: $(ERTS_INCLUDE_DIR))
 $(info WHISPER_DIR: $(WHISPER_DIR))
 $(info SOURCES: $(SOURCES))
 $(info TARGET: $(TARGET))
+$(info UNAME_S: $(UNAME_S))
 
 # Default target
 all: $(WHISPER_LIB) $(TARGET)
@@ -31,13 +49,14 @@ all: $(WHISPER_LIB) $(TARGET)
 $(WHISPER_DIR)/CMakeLists.txt:
 	git clone --depth 1 --branch $(WHISPER_TAG) $(WHISPER_REPO) $(WHISPER_DIR)
 
-# Build whisper static libraries (Metal off: keeps the NIF link simple; Accelerate BLAS on)
+# Build whisper static libraries (Metal off: keeps the NIF link simple).
 $(WHISPER_LIB): $(WHISPER_DIR)/CMakeLists.txt
 	cmake -S $(WHISPER_DIR) -B $(WHISPER_BUILD) \
 		-DBUILD_SHARED_LIBS=OFF \
 		-DGGML_METAL=OFF \
 		-DWHISPER_BUILD_EXAMPLES=OFF \
-		-DWHISPER_BUILD_TESTS=OFF
+		-DWHISPER_BUILD_TESTS=OFF \
+		$(WHISPER_CMAKE_EXTRA)
 	cmake --build $(WHISPER_BUILD) -j
 
 # Whisper model for the transcription NIF (not committed to git — 148MB)
