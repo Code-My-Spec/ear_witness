@@ -1,10 +1,10 @@
-defmodule TodoApp.MixProject do
+defmodule EarWitness.MixProject do
   use Mix.Project
 
   @version "1.2.0"
   def project do
     [
-      app: :todo_app,
+      app: :ear_witness,
       version: @version,
       elixir: "~> 1.14",
       elixirc_paths: elixirc_paths(Mix.env()),
@@ -33,7 +33,7 @@ defmodule TodoApp.MixProject do
   # Run "mix help compile.app" to learn about applications.
   def application do
     [
-      mod: {TodoApp, []},
+      mod: {EarWitness, []},
       extra_applications: [
         :logger,
         :ssl,

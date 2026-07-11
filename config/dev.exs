@@ -6,7 +6,7 @@ import Config
 # The watchers configuration can be used to run external
 # watchers to your application. For example, we use it
 # with esbuild to recompile .js and .css sources.
-config :todo_app, TodoWeb.Endpoint,
+config :ear_witness, EarWitnessWeb.Endpoint,
   debug_errors: true,
   code_reloader: true,
   check_origin: false,
@@ -21,9 +21,9 @@ config :todo_app, TodoWeb.Endpoint,
     patterns: [
       ~r"priv/static/.*(js|css|png|jpeg|jpg|gif|svg)$",
       ~r"priv/gettext/.*(po)$",
-      ~r"lib/todo_app/.*(ee?x)$",
-      ~r"lib/todo_web/(live|views)/.*(ex)$",
-      ~r"lib/todo_web/templates/.*(eex)$"
+      ~r"lib/ear_witness/.*(ee?x)$",
+      ~r"lib/ear_witness_web/(live|views)/.*(ex)$",
+      ~r"lib/ear_witness_web/templates/.*(eex)$"
     ]
   ]
 

@@ -44,7 +44,7 @@ npm-debug.log
 # C++ targets
 
 # Vendored whisper.cpp — cloned and built by `make` (see Makefile)
-/c_src/todo_app/whisper.cpp/
+/c_src/ear_witness/whisper.cpp/
 
 # Model binaries are too large for git — fetched by `make models/ggml-base.en.bin`
 /models/

@@ -58,7 +58,7 @@ chart =
 ```elixir
 sample_rate = 16_000
 threshold = 0.50
-model = Ortex.load(Path.join([:code.priv_dir(:todo_app), "models", "silero_vad.onnx"]))
+model = Ortex.load(Path.join([:code.priv_dir(:ear_witness), "models", "silero_vad.onnx"]))
 init_acc = %{
   h: Nx.broadcast(0.0, {2, 1, 64}),
   c: Nx.broadcast(0.0, {2, 1, 64}),
@@ -106,7 +106,7 @@ VegaLite.new(title: "VAD", width: 800, height: 400)
 ```
 
 ```elixir
-model = Ortex.load(Path.join([:code.priv_dir(:todo_app), "models", "segmentation-3.0.onnx"]))
+model = Ortex.load(Path.join([:code.priv_dir(:ear_witness), "models", "segmentation-3.0.onnx"]))
 
 tensor = Nx.from_binary(raw_data, :f32)
 input = Nx.reshape(tensor, {1, 1, div(byte_size(raw_data), 4)})
@@ -199,12 +199,12 @@ end
 
 ```elixir
 sample_rate = 16000
-windows = TodoApp.Audio.Windows.new(
+windows = EarWitness.Audio.Windows.new(
   window_size: Conversion.ms_to_bytes(10030, sample_rate) |> trunc(),
   chunk_size: Conversion.ms_to_bytes(17, sample_rate) |> trunc(),
   step_size: Conversion.ms_to_bytes(5015, sample_rate) |> trunc(),
   data: %{scores: []},
-  on_step_change: &TodoApp.Audio.SpeakerDiarizationSplitter.on_step_change/1,
+  on_step_change: &EarWitness.Audio.SpeakerDiarizationSplitter.on_step_change/1,
   model: model,
   sample_rate: sample_rate,
   max_binaries: 100
@@ -216,7 +216,7 @@ windows = TodoApp.Audio.Windows.new(
   raw_data
   |> Chunks.generate_chunks(1920) 
   |> Enum.reduce(windows, fn chunk, windows -> 
-    TodoApp.Audio.Windows.handle_buffer(windows, %{payload: chunk})
+    EarWitness.Audio.Windows.handle_buffer(windows, %{payload: chunk})
   end)
 
 data

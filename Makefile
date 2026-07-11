@@ -1,5 +1,5 @@
 # Variables
-WHISPER_DIR = c_src/todo_app/whisper.cpp
+WHISPER_DIR = c_src/ear_witness/whisper.cpp
 WHISPER_BUILD = $(WHISPER_DIR)/build
 WHISPER_LIB = $(WHISPER_BUILD)/src/libwhisper.a
 WHISPER_REPO = https://github.com/ggml-org/whisper.cpp.git
@@ -14,7 +14,7 @@ LDFLAGS = -dynamiclib -undefined dynamic_lookup \
 
 PROJECT = nif
 BUILDDIR = priv
-SOURCEDIR = c_src/todo_app
+SOURCEDIR = c_src/ear_witness
 TARGET = $(BUILDDIR)/$(PROJECT).so
 SOURCES := $(SOURCEDIR)/nif.cpp $(SOURCEDIR)/transcribe.cpp
 OBJS = $(patsubst $(SOURCEDIR)/%.cpp,$(BUILDDIR)/%.o,$(SOURCES))
