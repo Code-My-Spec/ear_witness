@@ -1,0 +1,112 @@
+name: "macOS Installer"
+
+# Builds the EarWitness macOS .dmg and, on a version tag, publishes it to a
+# GitHub Release. Without an Apple Developer ID the bundle is ad-hoc signed
+# (runs locally / right-click-Open); notarization can be added later by setting
+# the MACOS_PEM / notarization secrets.
+on:
+  push:
+    # TODO: drop the release/* line once this is green; keep master + tags.
+    branches: ["master", "release/**"]
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  macos:
+    name: "Build macOS installer (.dmg)"
+    runs-on: macos-15
+    timeout-minutes: 90
+    env:
+      # Match .tool-versions (the runtime the app is tested against locally).
+      OTP_VERSION: "29.0.3"
+      ELIXIR_VERSION: "1.20.2-otp-29"
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install build dependencies (wxWidgets, cmake, autotools)
+        run: |
+          brew update
+          brew install wxwidgets cmake automake autoconf libtool coreutils
+
+      - name: Install Rust toolchain (ortex NIF)
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Set up Node.js (assets)
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Cache asdf toolchain (Erlang/Elixir)
+        id: asdf-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.asdf
+          key: asdf-macos15-otp-${{ env.OTP_VERSION }}-elixir-${{ env.ELIXIR_VERSION }}-wx
+
+      - name: Install Erlang/Elixir with wx (asdf)
+        if: steps.asdf-cache.outputs.cache-hit != 'true'
+        run: |
+          set -euo pipefail
+          git clone https://github.com/asdf-vm/asdf.git "$HOME/.asdf" --branch v0.14.1
+          . "$HOME/.asdf/asdf.sh"
+          asdf plugin add erlang
+          asdf plugin add elixir
+          # wxWidgets from Homebrew must be visible so OTP builds :wx.
+          export PATH="$(brew --prefix wxwidgets)/bin:$PATH"
+          export KERL_CONFIGURE_OPTIONS="--disable-debug --without-javac --enable-wx"
+          asdf install erlang "$OTP_VERSION"
+          asdf install elixir "$ELIXIR_VERSION"
+
+      - name: Verify toolchain has wx
+        run: |
+          set -euo pipefail
+          . "$HOME/.asdf/asdf.sh"
+          asdf global erlang "$OTP_VERSION"
+          asdf global elixir "$ELIXIR_VERSION"
+          elixir --version
+          # Fail early if OTP was built without wx (the desktop app needs it).
+          erl -noshell -eval 'case code:ensure_loaded(wx) of {module,_}->io:format("wx OK~n"); _->halt(1) end, halt(0).'
+
+      - name: Build release + installer
+        run: |
+          set -euo pipefail
+          . "$HOME/.asdf/asdf.sh"
+          export PATH="$(brew --prefix wxwidgets)/bin:$PATH"
+          mix local.hex --force
+          mix local.rebar --force
+          mix deps.get
+          (cd assets && npm install)
+          mix assets.setup
+          mix assets.deploy
+          MIX_ENV=prod mix desktop.installer
+
+      - name: Verify the bundle is validly signed
+        run: |
+          set -euo pipefail
+          APP="_build/prod/EarWitness.app"
+          # Recursively verifies nested code + the bundle seal.
+          codesign --verify --verbose "$APP"
+          # Belt-and-suspenders: no dylib/NIF may have an invalid signature
+          # (Tahoe SIGKILLs those on load). Loop via process substitution so a
+          # failure sticks and the giant precompiled-dep paths don't overflow xargs.
+          bad=0
+          while IFS= read -r -d '' f; do
+            codesign -v "$f" 2>/dev/null || { echo "INVALID: $f"; bad=1; }
+          done < <(find "$APP" \( -name '*.so' -o -name '*.dylib' \) -print0)
+          [ "$bad" -eq 0 ]
+
+      - name: Upload installer artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: EarWitness-macOS-dmg
+          path: _build/prod/*.dmg
+
+      - name: Publish to GitHub Release (tags only)
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: _build/prod/*.dmg
+          fail_on_unmatched_files: true

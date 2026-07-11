@@ -91,8 +91,13 @@ defmodule EarWitness.MixProject do
     deps_list = [
       {:ecto_sqlite3, "~> 0.12"},
       {:desktop, "~> 1.5"},
-      # {:desktop_deployment, github: "elixir-desktop/deployment"},
-      {:desktop_deployment, path: "../deployment", runtime: false},
+      # Until elixir-desktop/deployment#15 (macOS installer fixes) is merged,
+      # track the fix branch so CI and local builds get the same tooling.
+      {:desktop_deployment,
+       github: "elixir-desktop/deployment",
+       branch: "fix/macos-otool-missing-precompiled-nif-path",
+       runtime: false},
+      # {:desktop_deployment, path: "../deployment", runtime: false},
 
       # Phoenix
       {:phoenix, "~> 1.8"},
