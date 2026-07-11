@@ -22,8 +22,9 @@ Keep Membrane (core ~> 1.0 plus portaudio, audio_mix, raw_audio, file
 plugins) as the audio capture/processing layer.
 
 ## Consequences
-- Capturing *system* audio (the other side of a call) is platform-specific and
-  remains open — likely a loopback/virtual-device integration per OS; needs
-  its own research task before the meeting-capture story.
+- System-audio tap targets (PM decision 2026-07-11, story 861): **macOS —
+  Core Audio process taps** (macOS 14.4+, no driver install); **Windows —
+  WASAPI loopback**, both in v1. Linux later. Integration details still need
+  a research pass before implementation.
 - Membrane's supervision integrates with the app's OTP tree; pipeline crashes
   don't take down the UI.

@@ -91,8 +91,8 @@ defmodule EarWitness.MixProject do
     deps_list = [
       {:ecto_sqlite3, "~> 0.12"},
       {:desktop, "~> 1.5"},
-      {:desktop_deployment, github: "elixir-desktop/deployment"},
-      # {:desktop_deployment, path: "../deployment", runtime: false},
+      # {:desktop_deployment, github: "elixir-desktop/deployment"},
+      {:desktop_deployment, path: "../deployment", runtime: false},
 
       # Phoenix
       {:phoenix, "~> 1.8"},

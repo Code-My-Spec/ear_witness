@@ -19,14 +19,18 @@ and runs entirely locally.
   session management, tool schemas, and transports the library already does.
 
 ## Decision
-Use Anubis (`{:anubis_mcp, "~> 1.6"}`), mounting its Phoenix transport on
-the local endpoint (127.0.0.1:4848) so MCP clients on the same machine —
-Claude Code, Claude Desktop, anything MCP-capable — can call EarWitness
-tools. Local-only binding preserves the local-first-privacy ADR: nothing is
-exposed off-machine.
+Use Anubis (`{:anubis_mcp, "~> 1.6"}`) over its **stdio transport** (PM
+decision 2026-07-11, story 868): MCP clients — Claude Code, Claude Desktop,
+anything MCP-capable — launch/connect to an EarWitness stdio endpoint on the
+same machine. No network port is opened for assistant access, which makes
+the local-first-privacy guarantee structural rather than configured. Scope:
+read tools (search, transcripts with speakers/timestamps) plus a single
+write tool (attach summary/note to a recording); access is user-enabled and
+revocable.
 
 ## Consequences
-- Tool modules follow Anubis's component pattern; QA needs an SSE-aware MCP
-  client (plain one-shot curl gets `202 Accepted`).
-- The MCP surface shares the app's lifecycle — tools are only available
-  while the desktop app runs.
+- Tool modules follow Anubis's component pattern.
+- QA drives the tool modules directly (or via an MCP client) — there is no
+  HTTP transport to curl.
+- The stdio entry point must reach the running app's data (or boot enough of
+  it) — the launcher design lands with the McpServer surface spec.
