@@ -80,7 +80,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.asdf
-          key: asdf-macos15-otp-${{ env.OTP_VERSION }}-elixir-${{ env.ELIXIR_VERSION }}-${{ env.WX_VERSION }}-compat30
+          key: asdf-macos15-otp-${{ env.OTP_VERSION }}-elixir-${{ env.ELIXIR_VERSION }}-${{ env.WX_VERSION }}-compat30-pathwx
 
       - name: Install Erlang/Elixir with wx (asdf)
         if: steps.asdf-cache.outputs.cache-hit != 'true'
@@ -90,10 +90,12 @@ jobs:
           . "$HOME/.asdf/asdf.sh"
           asdf plugin add erlang
           asdf plugin add elixir
-          # wx-config from our source-built wxWidgets must be found so OTP builds
-          # a usable :wx (with the wxe_driver.so C driver).
+          # OTP finds wxWidgets by running wx-config from PATH; --with-wxdir
+          # points at a build tree, not an install prefix, so it misdirects the
+          # search — rely on PATH instead.
           export PATH="$HOME/wxWidgets-install/bin:$PATH"
-          export KERL_CONFIGURE_OPTIONS="--with-wxdir=$HOME/wxWidgets-install --disable-debug --without-javac"
+          wx-config --version || { echo "wx-config not found on PATH"; exit 1; }
+          export KERL_CONFIGURE_OPTIONS="--disable-debug --without-javac"
           asdf install erlang "$OTP_VERSION"
           asdf install elixir "$ELIXIR_VERSION"
 
@@ -107,9 +109,12 @@ jobs:
           # The real check: the C driver must exist, or the desktop app
           # crash-loops at launch with {:load_driver, "No driver found"}.
           erlroot="$(asdf where erlang "$OTP_VERSION")"
+          echo "erlroot=$erlroot"
+          echo "--- wx app dir ---"; ls -la "$erlroot"/lib/ | grep -i wx || echo "(no wx app!)"
+          echo "--- wx priv ---"; ls -la "$erlroot"/lib/wx-*/priv/ 2>&1 || echo "(no wx priv dir)"
           driver="$(ls "$erlroot"/lib/wx-*/priv/wxe_driver.so 2>/dev/null || true)"
           if [ -z "$driver" ]; then
-            echo "wxe_driver.so was NOT built — OTP disabled wx. Check wxWidgets compat30." >&2
+            echo "wxe_driver.so was NOT built — OTP did not build a usable wx driver." >&2
             exit 1
           fi
           echo "wx driver present: $driver"
