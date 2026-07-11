@@ -18,6 +18,43 @@ record (framework issue 4734477c filed — the checker has no desktop path):
 - **Prod**: none exists — health check **verified** as not applicable;
   "production" is a signed installer running on the end user's machine.
 
+## Release smoke test (2026-07-11) — verified state and gaps
+
+Verified working on this Mac:
+
+- `mix assets.deploy` (esbuild + tailwind + digest) — passes.
+- `MIX_ENV=prod mix release default_release` — the `:assemble` step succeeds;
+  the release bundles the whisper.cpp NIF (`priv/nif.so`), the diarization
+  models (`priv/models/{silero_vad,segmentation-3.0}.onnx`), and static
+  assets.
+- The assembled release boots end-to-end (88 apps, including the wx desktop
+  window) — verified via `bin/default_release eval` with
+  `Application.ensure_all_started(:ear_witness)`.
+
+Known gaps (in priority order):
+
+1. **Installer generation crashes** in desktop_deployment 1.0.0:
+   `Tooling.cmd!/2` MatchError at `macos.ex:302` — `otool -L` is run against
+   the path recorded inside exqlite's *precompiled* NIF
+   (`/Users/runner/work/exqlite/...`, the GitHub CI build box) instead of the
+   release-local copy. Fix lives upstream in elixir-desktop/deployment
+   (John's workstream, repo at `../deployment`); workaround candidate: force
+   exqlite to compile from source.
+2. **`bin/default_release start` (detached stdio) crashes on first stderr
+   write** — crash dump slogan shows `:io.put_chars(:standard_error, ...)`
+   → "device does not exist". The console logger backend needs a
+   release-safe config (or the installer's launcher must keep stdio open).
+3. **Whisper model not bundled and path is cwd-relative** —
+   `c_src/ear_witness/transcribe.cpp:57` hardcodes `models/ggml-base.en.bin`
+   relative to the working directory; the 141MB model lives at repo root
+   (Makefile downloads it) and is not in priv. Transcription in a release
+   is broken until the Models context (story 866) owns model paths.
+4. **Runtime port override** — fixed: `EARWITNESS_PORT` now applies in
+   `config/runtime.exs` so releases honor it (compile-time config alone was
+   baked at build).
+5. Signing/notarization — also lives in `../deployment` per upstream layout;
+   not configured.
+
 ## Distribution — the desktop analog of deploy
 
 EarWitness follows the elixir-desktop release/packaging path, inherited from

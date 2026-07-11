@@ -1,5 +1,11 @@
 import Config
 
+# Port override must live here (not config.exs) so releases honor it at boot.
+if port = System.get_env("EARWITNESS_PORT") do
+  config :ear_witness, EarWitnessWeb.Endpoint,
+    http: [ip: {127, 0, 0, 1}, port: String.to_integer(port)]
+end
+
 # CodeMySpec support widget (chat + feedback tabs, server-side Slipstream).
 # The deploy key authenticates this install to CodeMySpec; it is generated on
 # the project page at codemyspec.com and must never be committed. Without it
