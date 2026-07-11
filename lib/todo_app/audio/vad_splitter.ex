@@ -105,7 +105,7 @@ defmodule TodoApp.Audio.VADSplitter do
   end
 
   defp generate_chunks(samples, chunk_size) when byte_size(samples) >= chunk_size do
-    <<chunk::binary-size(chunk_size), rest::binary>> = samples
+    <<chunk::binary-size(^chunk_size), rest::binary>> = samples
     [chunk | generate_chunks(rest, chunk_size)]
   end
 

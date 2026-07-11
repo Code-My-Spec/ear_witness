@@ -1,7 +1,7 @@
 defmodule TodoApp.Audio.VADPipelineTest do
-  use Membrane.Pipeline
   use ExUnit.Case
-  alias TodoApp.Audio.{VADSplitter, SpeakerDiarizationSplitter, Timestamper, Transcriber}
+  import Membrane.ChildrenSpec
+  alias TodoApp.Audio.{SpeakerDiarizationSplitter, Timestamper}
 
   describe "VAD" do
     test "Base Case" do
@@ -10,7 +10,7 @@ defmodule TodoApp.Audio.VADPipelineTest do
       spec = [
         child(:file_source, %Membrane.File.Source{location: path})
         |> child(:parser, %Membrane.RawAudioParser{
-          stream_format: %Membrane.RawAudio{
+          assumed_input_stream_format: %Membrane.RawAudio{
             channels: 1,
             sample_format: :f32le,
             sample_rate: 16_000

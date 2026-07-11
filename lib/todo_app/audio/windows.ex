@@ -1,6 +1,4 @@
 defmodule TodoApp.Audio.Windows do
-  require Logger
-
   defstruct([
     :window_size,
     :step_size,
@@ -102,7 +100,7 @@ defmodule TodoApp.Audio.Windows do
       "Byte index #{byte_index} with size #{payload_size} exceeded frame #{end_of_frame} at step index #{step_index}, appending #{remainder} bytes"
     )
 
-    <<payload_head::binary-size(remainder), payload_tail::binary>> = data
+    <<payload_head::binary-size(^remainder), payload_tail::binary>> = data
     Map.put(state, :binaries, [payload_tail, head <> payload_head | tail])
   end
 
@@ -142,20 +140,16 @@ defmodule TodoApp.Audio.Windows do
 
   def fetch_steps(windows, state) do
     %{
-      step_index: step_index,
       step_size: step_size,
-      steps_per_frame: steps_per_frame,
       sample_rate: sample_rate,
       window_size: window_size
     } = state
 
     [%{scd: scd} | _] = windows
     {n} = Nx.shape(scd)
-    samples_per_step = ceil(n / steps_per_frame)
     actual_sample_duration_ms = bytes_to_ms(window_size, sample_rate) / n
 
-    step_indexes =
-      windows
+    windows
       |> Enum.reverse()
       |> inspect_windows()
       |> Enum.with_index()
@@ -191,7 +185,7 @@ defmodule TodoApp.Audio.Windows do
     windows
   end
 
-  def aggregate_steps(steps, state) do
+  def aggregate_steps(steps, _state) do
     start_time =
       steps
       |> Enum.map(& &1.start_time)

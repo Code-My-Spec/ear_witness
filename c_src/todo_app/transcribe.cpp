@@ -1,4 +1,4 @@
-#include "whisper.cpp/whisper.h"
+#include "whisper.h"
 #include <iostream>
 #include <fstream>
 #include <vector>

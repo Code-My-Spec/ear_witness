@@ -11,7 +11,6 @@ defmodule TodoApp do
 
   """
   use Application
-  require Logger
 
   def config_dir(), do: Path.join([Desktop.OS.home(), ".config", "discussit"])
   def app_dir(), do: Path.join([Desktop.OS.home(), "Documents", "Discussit"])

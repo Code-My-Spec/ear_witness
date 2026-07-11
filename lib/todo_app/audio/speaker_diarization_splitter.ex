@@ -98,7 +98,6 @@ defmodule TodoApp.Audio.SpeakerDiarizationSplitter do
       binaries: binaries,
       step_index: step_index,
       step_size: step_size,
-      window_size: window_size,
       steps_per_frame: steps_per_frame
     } =
       state
@@ -141,17 +140,17 @@ defmodule TodoApp.Audio.SpeakerDiarizationSplitter do
 
   def aggregate_windows(first_window, second_window, opts \\ []) do
     _epsilon = Keyword.get(opts, :epsilon, 1.0e-12)
-    missing = Keyword.get(opts, :missing, :nan)
+    _missing = Keyword.get(opts, :missing, :nan)
 
     {1, frames_per_window, num_classes} = Nx.shape(first_window)
     num_frames_per_chunk = div(frames_per_window, 2)
 
-    hamming_window = hamming_window(frames_per_window)
+    _hamming_window = hamming_window(frames_per_window)
     # hamming_window = Nx.broadcast(1.0, {num_frames_per_chunk, 1})
 
     first_half = Nx.slice(second_window, [0, 0, 0], [1, num_frames_per_chunk, num_classes])
 
-    second_half =
+    _second_half =
       Nx.slice(first_half, [0, num_frames_per_chunk, 0], [1, num_frames_per_chunk, num_classes])
 
     # mask = Nx.is_nan(combined)

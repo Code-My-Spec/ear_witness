@@ -1,5 +1,5 @@
 defmodule TodoApp.Signals.PeakDetector do
-  def detect_peaks(scores, %{alpha: alpha, min_duration: min_duration, step_size: step_size}) do
+  def detect_peaks(scores, %{alpha: alpha, min_duration: min_duration, step_size: _step_size}) do
     num_frames = length(scores)
     # Assuming step size of 1 for simplicity
     precision = 1
@@ -12,7 +12,7 @@ defmodule TodoApp.Signals.PeakDetector do
     build_binary_segmentations(boundaries, num_frames)
   end
 
-  defp find_local_maxima(scores, order) do
+  defp find_local_maxima(scores, _order) do
     len = length(scores)
 
     1..(len - 2)
