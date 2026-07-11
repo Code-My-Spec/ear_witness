@@ -42,17 +42,46 @@ through the UI would make every downstream spec pay for a slow or
 hardware-dependent step (live audio capture, whisper inference, model
 download, a bot joining a real meeting).
 
-## Slow/hardware seams — cassette-style substitution
+## Slow/hardware seams — RECORDED-response substitution
 
 Four operations cannot run for real in specs. Each hides behind its context
-and gets substituted at the seam (config-selected module), never in the
-spec file:
+and gets substituted at a config-selected seam, never in the spec file.
+**Doubles replay recorded real output — never hand-written data** (PM
+decision 2026-07-11):
 
-- whisper.cpp inference (`Transcription.Engine`) — canned JSON output.
-- Diarization models (`Speakers.Diarizer`) — canned segment/embedding data.
-- Model downloads (`Models.Downloader`) — local test artifact, no network.
-- Audio capture (`Audio.Pipeline` / `Audio.Tap`) — fixture WAV files (the
-  repo already carries `test/fixtures/*.raw`).
+- whisper.cpp inference (`Transcription.Engine`) — test env uses
+  `EarWitnessTest.RecordedTranscriptionEngine`
+  (`config :ear_witness, :transcription_engine`), which replays cassettes
+  under `test/fixtures/transcription_cassettes/` captured from the real
+  NIF on the repo's fixture audio. Re-record instructions are in that
+  module's moduledoc. The real engine stays covered by the ExUnit
+  integration test (`test/ear_witness/transcribe_test.exs`) running actual
+  whisper.cpp.
+- Diarization models (`Speakers.Diarizer`) — same pattern: record real
+  ONNX pipeline output from `test/fixtures/*.raw`, replay in specs.
+- Model downloads (`Models.Downloader`) — ReqCassette over the real
+  download endpoints (record once, replay; small test artifact).
+- Audio capture (`Audio.Pipeline` / `Audio.Tap`) —
+  `config :ear_witness, :capture_source, :fixture` feeds fixture WAV
+  bytes instead of portaudio; `EarWitnessSpex.Fixtures.simulate_no_input_devices/0`
+  covers the no-device path.
+
+The "no network" product claim is enforced structurally, not per-spec: the
+`EarWitness.Transcription` and `EarWitness.Speakers` contexts take no HTTP
+client dependency (boundary deps + review), so there is nothing that COULD
+phone home during inference.
+
+## Selector conventions — assert structure, not prose
+
+`then_` steps assert on `data-test` attributes, not free-text `=~` matches
+(prose changes; contracts shouldn't). The UI implements these:
+
+- `[data-test="recording-row"]` — one per library recording (contains title)
+- `[data-test="recording-duration"]`, `[data-test="recording-source"]`
+- `[data-test="import-error"]`, `[data-test="capture-error"]`
+- `[data-test="transcribe-button"]`, `[data-test="job-status"]`
+- `[data-test="transcript"]`, `[data-test="transcript-segment"]`,
+  `[data-test="segment-timestamp"]`, `[data-test="segment-speaker"]`
 
 ## Legal observable surfaces in `then_`
 
