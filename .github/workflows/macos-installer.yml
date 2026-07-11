@@ -60,6 +60,12 @@ jobs:
           git clone --depth 1 --branch "$WX_VERSION" https://github.com/wxWidgets/wxWidgets.git "$HOME/wxWidgets-src"
           cd "$HOME/wxWidgets-src"
           git submodule update --init --depth 1
+          # Homebrew image libs aren't on the default Apple-Silicon search path,
+          # so point the compiler/pkg-config at their kegs.
+          PNG_P="$(brew --prefix libpng)"; JPEG_P="$(brew --prefix jpeg)"; TIFF_P="$(brew --prefix libtiff)"
+          export CPPFLAGS="-I$PNG_P/include -I$JPEG_P/include -I$TIFF_P/include"
+          export LDFLAGS="-L$PNG_P/lib -L$JPEG_P/lib -L$TIFF_P/lib"
+          export PKG_CONFIG_PATH="$PNG_P/lib/pkgconfig:$JPEG_P/lib/pkgconfig:$TIFF_P/lib/pkgconfig"
           # Static wx core (--disable-shared); compat30 + webview are what
           # elixir-desktop needs. Use system image libs (Homebrew) to avoid
           # wxWidgets' bundled libpng, which won't build on a modern SDK.
