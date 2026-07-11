@@ -51,7 +51,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/wxWidgets-install
-          key: wxwidgets-${{ env.WX_VERSION }}-static-compat30-macos15
+          key: wxwidgets-${{ env.WX_VERSION }}-shared-compat30-macos15
 
       - name: Build wxWidgets from source
         if: steps.wx-cache.outputs.cache-hit != 'true'
@@ -66,11 +66,13 @@ jobs:
           export CPPFLAGS="-I$PNG_P/include -I$JPEG_P/include -I$TIFF_P/include"
           export LDFLAGS="-L$PNG_P/lib -L$JPEG_P/lib -L$TIFF_P/lib"
           export PKG_CONFIG_PATH="$PNG_P/lib/pkgconfig:$JPEG_P/lib/pkgconfig:$TIFF_P/lib/pkgconfig"
-          # Static wx core (--disable-shared); compat30 + webview are what
-          # elixir-desktop needs. Use system image libs (Homebrew) to avoid
-          # wxWidgets' bundled libpng, which won't build on a modern SDK.
+          # Shared wx (matches the OTP 29 / arm64 config that builds a working
+          # wxe_driver.so locally); compat30 + webview are what elixir-desktop
+          # needs. Use system image libs (Homebrew) to avoid wxWidgets' bundled
+          # libpng, which won't build on a modern SDK. The wx dylibs get bundled
+          # into the .app by desktop_deployment.
           ./configure --prefix="$HOME/wxWidgets-install" \
-            --enable-webview --enable-compat30 --disable-shared --disable-debug \
+            --enable-webview --enable-compat30 --enable-shared --disable-debug \
             --with-libpng=sys --with-libjpeg=sys --with-libtiff=sys
           make -j"$(sysctl -n hw.ncpu)"
           make install
@@ -80,7 +82,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.asdf
-          key: asdf-macos15-otp-${{ env.OTP_VERSION }}-elixir-${{ env.ELIXIR_VERSION }}-${{ env.WX_VERSION }}-compat30-pathwx
+          key: asdf-macos15-otp-${{ env.OTP_VERSION }}-elixir-${{ env.ELIXIR_VERSION }}-${{ env.WX_VERSION }}-sharedwx
 
       - name: Install Erlang/Elixir with wx (asdf)
         if: steps.asdf-cache.outputs.cache-hit != 'true'
