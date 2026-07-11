@@ -1,60 +1,78 @@
-# EarWitness: A Desktop Sample App
+# EarWitness
 
-This application is an example of an Elixir LiveView based desktop application. It uses the elixir-desktop library and a local SQLite database to create a web-technology based desktop app.
+A desktop app that listens, transcribes, and figures out who said what — entirely on your machine. No audio ever leaves your computer.
 
-## Changes in 1.2
+Built with Elixir and LiveView by [Code My Spec](https://codemyspec.com/).
 
-- Added `desktop_deployment` and CI to generate windows+macos+linux binaries
+## How it works
 
-To build binaries locally run:
+EarWitness runs as a native desktop app ([elixir-desktop](https://github.com/elixir-desktop/desktop)) with a [Membrane](https://membrane.stream/) audio pipeline behind it:
 
-```bash
-mix desktop.installer
-```
+1. **Capture** — PortAudio streams raw audio from any input device.
+2. **Voice activity detection** — [Silero VAD](https://github.com/snakers4/silero-vad) (ONNX, via [Ortex](https://github.com/elixir-nx/ortex)) splits the stream into utterances and drops silence.
+3. **Transcription** — a [whisper.cpp](https://github.com/ggml-org/whisper.cpp) NIF transcribes recordings locally.
+4. **Speaker change detection** *(in progress)* — the [pyannote segmentation-3.0](https://huggingface.co/pyannote/segmentation-3.0) model scores per-speaker activity over sliding windows; peak detection over the change scores marks speaker boundaries.
+5. **Speaker clustering & identification** *(planned)* — speaker embeddings + clustering to label who said what.
 
-## Changes in 1.1
+Transcripts land as plain text files in `~/Documents/Discussit/transcripts`.
 
-- Updated to Phoenix 1.7 and LiveView 0.18
+## Requirements
 
-## Changes in 1.0
+- Erlang/OTP 29 and Elixir 1.20 (see `.tool-versions`; both via [asdf](https://asdf-vm.com/))
+- cmake and a C++ compiler (for whisper.cpp and the NIF)
+- npm (for assets)
 
-- Updated to Phoenix 1.6 with esbuild+dart_scss
-- Added iOS platform example wrapper (see https://github.com/elixir-desktop/ios-example-app)
-- Added Android platform example wrapper (see https://github.com/elixir-desktop/android-example-app)
+> **macOS + wxWidgets note:** elixir-desktop needs Erlang built with wx support, and OTP's wx bindings do not build against wxWidgets 3.3 (what Homebrew ships). Build wxWidgets 3.2.x from source with `--enable-compat30`, then build Erlang with `--with-wx-config` pointing at it:
+>
+> ```bash
+> export KERL_CONFIGURE_OPTIONS="--without-javac --with-ssl=$(brew --prefix openssl@3) --with-wx-config=$HOME/.local/wxwidgets-3.2.9/bin/wx-config"
+> asdf install
+> ```
 
-## General notes
-
-To run this app you need at least Erlang 24 and recent builds of wxWidgets and at least
-Elixir 1.11.4.
-
-## Dependencies
-
-This example assumes you've got installed:
-
-- git
-- Elixir, at least 1.11.4
-- Erlang, at least OTP 24
-- npm
-- C compiler (make/nmake) for SQLite
-
-If you want to build for iOS you'll also need xcode and in order to build for Android you'll need the
-Android Studio.
-
-## Application set-up
-
-Run:
+## Setup
 
 ```bash
-cd assets
-npm install
-cd ..
+# Elixir deps
+mix deps.get
+
+# whisper.cpp (cloned + built at a pinned tag) and the NIF
+mix compile
+
+# Whisper model (~148 MB, not in git)
+make models/ggml-base.en.bin
+
+# Assets
+(cd assets && npm install)
 mix assets.deploy
+
+# Secrets — copy and fill in (only needed for the gated pyannote models)
+cp .env.example .env
 ```
 
-## Screenshots
+## Run
 
-![Linux build](/nodeploy/linux_todo.png?raw=true "Linux build")
-![Windows build](/nodeploy/windows_todo.png?raw=true "Windows build")
-![MacOS build](/nodeploy/macos_todo.png?raw=true "MacOS build")
-![Android build](/nodeploy/android_todo.png?raw=true "Android build")
-![iOS build](/nodeploy/ios_todo.png?raw=true "iOS build")
+```bash
+mix phx.server
+```
+
+A desktop window opens with the recorder UI. Recordings are transcribed in the background and deleted once their transcript is written.
+
+```bash
+mix test
+```
+
+## Project layout
+
+| Path | What |
+|---|---|
+| `lib/ear_witness/audio/` | Membrane pipeline: PortAudio source, VAD splitter, speaker-diarization splitter, sliding `Windows` |
+| `lib/ear_witness/signals/` | Peak detection over speaker-change scores |
+| `lib/ear_witness/transcription/` | GenServer driving the whisper.cpp NIF |
+| `lib/ear_witness_web/` | Phoenix/LiveView UI shown in the desktop webview |
+| `c_src/ear_witness/` | Transcription NIF (whisper.cpp is cloned here by `make`, not committed) |
+| `priv/models/` | Silero VAD and pyannote segmentation ONNX models |
+| `segmentation.livemd` | Livebook for exploring the segmentation model output |
+
+---
+
+Made by [Code My Spec](https://codemyspec.com/).
