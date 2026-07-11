@@ -30,10 +30,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install build dependencies (cmake, autotools)
+      - name: Install build dependencies (cmake, autotools, image libs)
         run: |
           brew update
-          brew install cmake automake autoconf libtool coreutils
+          # libpng/jpeg/tiff: wxWidgets' *bundled* libpng includes the ancient
+          # <fp.h> header and won't compile against a modern macOS SDK, so we
+          # build wx against the Homebrew image libraries instead.
+          brew install cmake automake autoconf libtool coreutils libpng jpeg libtiff
 
       - name: Install Rust toolchain (ortex NIF)
         uses: dtolnay/rust-toolchain@stable
@@ -57,10 +60,12 @@ jobs:
           git clone --depth 1 --branch "$WX_VERSION" https://github.com/wxWidgets/wxWidgets.git "$HOME/wxWidgets-src"
           cd "$HOME/wxWidgets-src"
           git submodule update --init --depth 1
-          # Static (--disable-shared) so wxe_driver.so is self-contained;
-          # compat30 + webview are what elixir-desktop needs.
+          # Static wx core (--disable-shared); compat30 + webview are what
+          # elixir-desktop needs. Use system image libs (Homebrew) to avoid
+          # wxWidgets' bundled libpng, which won't build on a modern SDK.
           ./configure --prefix="$HOME/wxWidgets-install" \
-            --enable-webview --enable-compat30 --disable-shared --disable-debug
+            --enable-webview --enable-compat30 --disable-shared --disable-debug \
+            --with-libpng=sys --with-libjpeg=sys --with-libtiff=sys
           make -j"$(sysctl -n hw.ncpu)"
           make install
 
