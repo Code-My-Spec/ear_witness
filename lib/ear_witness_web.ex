@@ -17,9 +17,14 @@ defmodule EarWitnessWeb do
   and import those modules here.
   """
 
+  # Mass-exported: same rationale as EarWitness (see lib/ear_witness.ex) —
+  # classifies all EarWitnessWeb.* modules under one boundary without
+  # inventing a premature curated export list.
+  use Boundary, deps: [EarWitness], exports: :all
+
   def controller do
     quote do
-      use Phoenix.Controller
+      use Phoenix.Controller, formats: [html: "View", json: "View"]
 
       import Plug.Conn
       use Gettext, backend: EarWitnessWeb.Gettext

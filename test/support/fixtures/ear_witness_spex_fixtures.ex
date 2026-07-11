@@ -21,4 +21,14 @@ defmodule EarWitnessSpex.Fixtures do
   #   defdelegate transcript_fixture(recording, attrs \\ %{}),
   #     to: EarWitness.Transcription
   #     # a finished transcript, so search/read specs skip the whisper run
+
+  @doc """
+  Makes the capture layer report zero available input devices for the
+  current test (spec 7325 — "No input device available"). Implemented when
+  the EarWitness.Audio device seam lands; raising keeps the spec honestly
+  red until then.
+  """
+  def simulate_no_input_devices do
+    raise "EarWitness.Audio device seam not implemented yet (story 860, criterion 7325)"
+  end
 end
