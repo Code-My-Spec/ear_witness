@@ -6,8 +6,7 @@ name: "macOS Installer"
 # the MACOS_PEM / notarization secrets.
 on:
   push:
-    # TODO: drop the release/* line once this is green; keep master + tags.
-    branches: ["master", "release/**"]
+    branches: ["master"]
     tags: ["v*"]
   workflow_dispatch:
 
