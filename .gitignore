@@ -52,6 +52,10 @@ npm-debug.log
 # Editor
 /.vscode/
 
+# CodeMySpec
+.code_my_spec/internal/
+/diagnostics.jsonl
+
 
 
 # Python shit
