@@ -8,11 +8,14 @@ config :esbuild,
     env: %{"NODE_PATH" => Path.expand("../deps", __DIR__)}
   ]
 
-config :dart_sass,
-  version: "1.61.0",
+config :tailwind,
+  version: "4.1.7",
   default: [
-    args: ~w(css/app.scss ../priv/static/assets/app.css),
-    cd: Path.expand("../assets", __DIR__)
+    args: ~w(
+      --input=assets/css/app.css
+      --output=priv/static/assets/app.css
+    ),
+    cd: Path.expand("..", __DIR__)
   ]
 
 config :logger,
@@ -26,8 +29,12 @@ config :logger, :console,
 
 # Configures the endpoint
 config :ear_witness, EarWitnessWeb.Endpoint,
-  # because of the iOS rebind - this is now a fixed port, but randomly selected
-  http: [ip: {127, 0, 0, 1}, port: 10_000 + :rand.uniform(45_000)],
+  # Fixed, predictable default so QA tooling and MCP clients can find the app;
+  # override with EARWITNESS_PORT (e.g. for the iOS rebind case or collisions).
+  http: [
+    ip: {127, 0, 0, 1},
+    port: String.to_integer(System.get_env("EARWITNESS_PORT") || "4848")
+  ],
   render_errors: [view: EarWitnessWeb.ErrorView, accepts: ~w(html json), layout: false],
   pubsub_server: EarWitness.PubSub,
   live_view: [signing_salt: "sWpG9ljX"],
@@ -46,6 +53,12 @@ config :ear_witness, Oban,
   engine: Oban.Engines.Lite,
   queues: [default: 10],
   repo: EarWitness.Repo
+
+# CodeMySpec support widget (chat + feedback). The deploy key and any
+# user-facing email are supplied at runtime — see config/runtime.exs.
+# Without a deploy key the widget client stays disconnected (no-op).
+config :ear_witness,
+  codemyspec_widget_url: "wss://codemyspec.com/widget"
 
 # Import environment specific config. This must remain at the bottom
 # of this file so it overrides the configuration defined above.

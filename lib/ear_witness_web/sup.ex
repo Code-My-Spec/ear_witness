@@ -12,6 +12,8 @@ defmodule EarWitnessWeb.Sup do
   def init([]) do
     children = [
       {Phoenix.PubSub, name: EarWitness.PubSub},
+      {Registry, keys: :unique, name: EarWitness.CodeMySpec.WidgetRegistry},
+      {DynamicSupervisor, strategy: :one_for_one, name: EarWitness.CodeMySpec.WidgetSupervisor},
       EarWitnessWeb.Endpoint,
       EarWitness.Transcription.Server,
       {Oban, Application.fetch_env!(:ear_witness, Oban)}

@@ -1,0 +1,11 @@
+/* Tailwind v4 + DaisyUI (vendored plugin, standalone CLI — no node build). */
+@import "tailwindcss" source(none);
+@source "../js";
+@source "../../lib/ear_witness_web";
+
+@plugin "../vendor/daisyui" {
+  themes: light --default, dark --prefersdark;
+}
+
+/* Legacy todo-app styles — retired as surfaces are rebuilt on DaisyUI. */
+@import "./legacy.css";

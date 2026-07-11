@@ -14,5 +14,6 @@
     <div class="wrap">
       <%= @inner_content %>
     </div>
+    <%= live_render(@conn, EarWitnessWeb.ChatWidgetLive, id: "codemyspec-chat", sticky: true) %>
   </body>
 </html>

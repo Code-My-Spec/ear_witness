@@ -65,6 +65,17 @@ defmodule EarWitnessWeb do
     end
   end
 
+  def static_paths, do: ~w(assets images favicon.ico robots.txt)
+
+  def verified_routes do
+    quote do
+      use Phoenix.VerifiedRoutes,
+        endpoint: EarWitnessWeb.Endpoint,
+        router: EarWitnessWeb.Router,
+        statics: EarWitnessWeb.static_paths()
+    end
+  end
+
   def router do
     quote do
       use Phoenix.Router

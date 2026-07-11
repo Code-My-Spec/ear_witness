@@ -8,7 +8,7 @@ defmodule EarWitness.MixProject do
       version: @version,
       elixir: "~> 1.14",
       elixirc_paths: elixirc_paths(Mix.env()),
-      compilers: [:elixir_make] ++ Mix.compilers(),
+      compilers: compilers(Mix.env()),
       listeners: [Phoenix.CodeReloader],
       start_permanent: Mix.env() == :prod,
       deps: deps(),
@@ -30,10 +30,22 @@ defmodule EarWitness.MixProject do
   defp elixirc_paths(:test), do: ["lib", "test/support"]
   defp elixirc_paths(_), do: ["lib"]
 
+  # :spex omitted until a dep ships Mix.Tasks.Compile.Spex
+  # (framework issue: no published CodeMySpec package provides it)
+  defp compilers(:test),
+    do: [:elixir_make, :diagnostics, :boundary, :phoenix_live_view, :erlang, :elixir, :app]
+
+  defp compilers(_),
+    do: [:elixir_make, :diagnostics, :boundary, :phoenix_live_view, :erlang, :elixir, :app]
+
+  def cli do
+    [preferred_envs: [spex: :test]]
+  end
+
   # Run "mix help compile.app" to learn about applications.
   def application do
     [
-      mod: {EarWitness, []},
+      mod: {EarWitnessWeb.Application, []},
       extra_applications: [
         :logger,
         :ssl,
@@ -59,10 +71,11 @@ defmodule EarWitness.MixProject do
         "gettext.extract",
         "gettext.merge priv/gettext --locale de"
       ],
+      "assets.setup": ["tailwind.install --if-missing", "esbuild.install --if-missing"],
       "assets.deploy": [
         "phx.digest.clean --all",
         "esbuild default --minify",
-        "sass default --no-source-map --style=compressed",
+        "tailwind default --minify",
         "phx.digest"
       ],
       lint: [
@@ -93,11 +106,19 @@ defmodule EarWitness.MixProject do
 
       # Assets
       {:esbuild, "~> 0.8", runtime: Mix.env() == :dev},
-      {:dart_sass, "~> 0.7", runtime: Mix.env() == :dev},
+      {:tailwind, "~> 0.3", runtime: Mix.env() == :dev},
 
       # Test
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
       {:mix_test_watch, "~> 1.0", only: [:dev, :test], runtime: false},
+
+      # CodeMySpec
+      {:client_utils, "~> 0.1.21"},
+      {:slipstream, "~> 1.1"},
+      {:sobelow, "~> 0.13", only: [:dev, :test], runtime: false},
+      {:sexy_spex, "~> 0.1.0"},
+      {:boundary, "~> 0.10", runtime: false},
+      {:code_my_spec_generators, "~> 0.1.0", only: :dev},
 
       # Livebook
       {:kino_vega_lite, "~> 0.1.10", only: [:dev]},
