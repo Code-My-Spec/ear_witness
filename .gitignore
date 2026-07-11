@@ -40,3 +40,22 @@ npm-debug.log
 
 # config dir
 /.config/*
+
+# C++ targets
+
+# Vendored whisper.cpp — cloned and built by `make` (see Makefile)
+/c_src/todo_app/whisper.cpp/
+
+# Model binaries are too large for git — fetched by `make models/ggml-base.en.bin`
+/models/
+
+# Editor
+/.vscode/
+
+
+
+# Python shit
+*.pyc
+
+# Secrets — real values live here, never committed (varlock integration planned)
+.env

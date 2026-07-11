@@ -1,0 +1,314 @@
+# Speech Segmentation
+
+## Section
+
+```elixir
+defmodule Chunks do
+  def generate_le_chunks(samples) when byte_size(samples) >= 4 do
+    <<chunk::32-float-little, rest::binary>> = samples
+    [chunk | generate_le_chunks(rest)]
+  end
+  
+  def generate_le_chunks(samples) do
+    [samples]
+  end
+
+  
+  def generate_chunks(samples, chunk_size) when byte_size(samples) >= chunk_size do
+    <<chunk::binary-size(chunk_size), rest::binary>> = samples
+    [chunk | generate_chunks(rest, chunk_size)]
+  end
+
+  def generate_chunks(samples, _chunk_size) do
+    [samples]
+  end
+end
+
+raw_data = File.read!("test/fixtures/diarize.raw")
+samples = Chunks.generate_le_chunks(raw_data)
+
+Enum.count(samples)
+```
+
+```elixir
+audio_chart_values = 
+  samples 
+  |> Enum.with_index(fn value, index -> 
+    %{x: index / 16000, y: value}
+  end)
+```
+
+```elixir
+chart =
+  VegaLite.new(title: "Raw Audio File", width: 800, height: 400)
+  |> VegaLite.mark(:line)
+  |> VegaLite.encode_field(:x, "x",
+    type: :quantitative,
+    title: "Time",
+    axis: [ticks: true, domain: false, grid: false, labels: true]
+  )
+  |> VegaLite.encode_field(:y, "y",
+    type: :quantitative,
+    title: "Audio"
+  )
+  |> VegaLite.data_from_values(audio_chart_values)
+  |> Kino.VegaLite.new()
+```
+
+```elixir
+sample_rate = 16_000
+threshold = 0.50
+model = Ortex.load(Path.join([:code.priv_dir(:todo_app), "models", "silero_vad.onnx"]))
+init_acc = %{
+  h: Nx.broadcast(0.0, {2, 1, 64}),
+  c: Nx.broadcast(0.0, {2, 1, 64}),
+  data: []
+}
+
+vad_values = 
+  Chunks.generate_chunks(raw_data, 1920)
+  |> Enum.filter(& &1 != "")
+  |> Enum.with_index()
+  |> Enum.reduce(init_acc, fn {audio, index}, %{h: h, c: c, data: data} -> 
+    input = Nx.from_binary(audio, :f32) |> Nx.new_axis(0)
+    sr = Nx.tensor(sample_rate)
+    {a, b, c} = Ortex.run(model, {input, sr, h, c})
+
+    {output, new_h, new_c} =
+      case [Nx.shape(a), Nx.shape(b), Nx.shape(c)] do
+        [{1, 1}, {2, 1, 64}, {2, 1, 64}] -> {a, b, c}
+        [{2, 1, 64}, {2, 1, 64}, {1, 1}] -> {c, a, b}
+        [{2, 1, 64}, {1, 1}, {2, 1, 64}] -> {b, c, a}
+      end
+
+    prob = output |> Nx.squeeze() |> Nx.to_number()
+    %{h: new_h, c: new_c, data: [%{x: 0.030 * index, y: prob} | data]}
+  end)
+  |> Map.get(:data)
+
+
+```
+
+```elixir
+VegaLite.new(title: "VAD", width: 800, height: 400)
+|> VegaLite.mark(:line)
+|> VegaLite.encode_field(:x, "x",
+  type: :quantitative,
+  title: "Time",
+  axis: [ticks: true, domain: false, grid: false, labels: true]
+)
+|> VegaLite.encode_field(:y, "y",
+  type: :quantitative,
+  title: "VAD Probability"
+)
+|> VegaLite.data_from_values(vad_values)
+|> Kino.VegaLite.new()
+```
+
+```elixir
+model = Ortex.load(Path.join([:code.priv_dir(:todo_app), "models", "segmentation-3.0.onnx"]))
+
+tensor = Nx.from_binary(raw_data, :f32)
+input = Nx.reshape(tensor, {1, 1, div(byte_size(raw_data), 4)})
+{result} = Ortex.run(model, {input})
+{1, num_samples, num_classes} = Nx.shape(result)
+
+speaker_prob_values = 
+  Nx.reshape(result, {num_samples, num_classes})
+  |> Nx.backend_transfer()
+  |> Nx.to_list()
+  |> Enum.with_index()
+  |> Enum.reduce([], fn {[vad, a, b, c, ab, ac, bc], index}, acc ->
+    [
+      %{y: a, speaker: "Speaker A", x: index * 0.017},
+      %{y: b, speaker: "Speaker B", x: index * 0.017},
+      %{y: c, speaker: "Speaker C", x: index * 0.017} | acc      
+    ]
+  end)
+
+```
+
+```elixir
+VegaLite.new(title: "Speaker Probabilities", width: 800, height: 400)
+|> VegaLite.mark(:line)
+|> VegaLite.encode_field(:x, "x",
+  type: :quantitative,
+  title: "Time",
+  axis: [ticks: true, domain: false, grid: false, labels: true]
+)
+|> VegaLite.encode_field(:y, "y",
+  type: :quantitative,
+  title: "Speaker Probability"
+)
+|> VegaLite.encode_field(:color, "speaker",
+  type: :nominal,
+  title: "Speaker A Probability"
+)
+|> VegaLite.data_from_values(speaker_prob_values)
+|> Kino.VegaLite.new()
+```
+
+```elixir
+scd_values =
+  Nx.reshape(result, {num_samples, num_classes})
+  |> Nx.backend_transfer()
+  |> Nx.diff(axis: 0, order: 1)
+  |> Nx.abs()
+  |> Nx.reduce_max(axes: [1])
+  |> Nx.to_list()
+  |> Enum.with_index()
+  |> Enum.map(fn {value, index} ->
+      %{y: value, x: index * 0.017}    
+    end)
+
+VegaLite.new(title: "Speaker Change Detection", width: 800, height: 400)
+|> VegaLite.mark(:line)
+|> VegaLite.encode_field(:x, "x",
+  type: :quantitative,
+  title: "Time",
+  axis: [ticks: true, domain: false, grid: false, labels: true]
+)
+|> VegaLite.encode_field(:y, "y",
+  type: :quantitative,
+  title: "Change Probability"
+)
+|> VegaLite.data_from_values(scd_values)
+|> Kino.VegaLite.new()
+```
+
+```elixir
+<<head::binary-size(295 * 1088), rest::binary>> = raw_data
+tensor = Nx.from_binary(head, :f32)
+input = Nx.reshape(tensor, {1, 1, div(byte_size(head), 4)})
+IO.inspect(input)
+{result} = Ortex.run(model, {input})
+IO.inspect(Nx.shape(result))
+```
+
+```elixir
+defmodule Conversion do
+  def ms_to_bytes(duration, sample_rate) do
+    sample_rate * duration * 4 / 1000
+  end
+
+  def bytes_to_ms(count_bytes, sample_rate) do
+    count_bytes * (1 / 4) * 1000 / sample_rate
+  end
+end
+```
+
+```elixir
+sample_rate = 16000
+windows = TodoApp.Audio.Windows.new(
+  window_size: Conversion.ms_to_bytes(10030, sample_rate) |> trunc(),
+  chunk_size: Conversion.ms_to_bytes(17, sample_rate) |> trunc(),
+  step_size: Conversion.ms_to_bytes(5015, sample_rate) |> trunc(),
+  data: %{scores: []},
+  on_step_change: &TodoApp.Audio.SpeakerDiarizationSplitter.on_step_change/1,
+  model: model,
+  sample_rate: sample_rate,
+  max_binaries: 100
+)
+```
+
+```elixir
+%{binaries: binaries, data: data, aggregated_data: aggregated_data} = 
+  raw_data
+  |> Chunks.generate_chunks(1920) 
+  |> Enum.reduce(windows, fn chunk, windows -> 
+    TodoApp.Audio.Windows.handle_buffer(windows, %{payload: chunk})
+  end)
+
+data
+```
+
+```elixir
+audio_data =
+  binaries
+  |> Enum.reverse()
+  |> Enum.with_index(fn binary, index ->
+    Chunks.generate_le_chunks(binary)
+    |> Enum.with_index(fn value, inner_index -> 
+      %{x: 1.003 * index + (inner_index) / 16000, y: value, step: index, data: "audio"}
+    end)
+  |> Enum.take_every(10)
+  end)
+  |> List.flatten()
+```
+
+```elixir
+aggregated_chart_data = 
+  aggregated_data
+  |> Enum.reverse()
+  |> Enum.map(fn %{start_time: start_time, duration: duration, scd: scd} ->
+    Nx.to_list(scd)  
+    |> Enum.with_index(fn value, index -> 
+      %{x: (start_time + index * duration) / 1000, y: value, data: "aggregated_scd", step: "scd"}
+    end)
+  end)
+  |> List.flatten()
+```
+
+```elixir
+%{steps_per_frame: steps_per_frame} = windows
+scd_data =
+  data
+  |> Enum.reverse()
+  |> Enum.with_index(fn %{scd: scd}, zero_index ->
+    index = zero_index + 1
+    chart_rows = steps_per_frame + 2
+    chart_index = 
+      case index > chart_rows do
+        false -> index
+        true -> index - trunc(index/ chart_rows) * steps_per_frame - 2
+      end
+    scd
+    |> Nx.to_list()
+    |> Enum.reverse()
+    |> Enum.with_index(fn value, inner_index -> 
+      %{
+        x: 1.003 * index + inner_index * 0.017, 
+        y: value, 
+        data: "scd #{to_string(chart_index) |> String.pad_leading(2, "0")}", 
+        step: "scd"
+      }
+    end)
+  end)
+  |> List.flatten()
+```
+
+```elixir
+chart_data = audio_data ++ aggregated_chart_data ++ scd_data
+  
+VegaLite.new(width: 700, height: 60)
+|> VegaLite.mark(:line)  
+|> VegaLite.encode_field(:x, "x",
+    type: :quantitative,
+    title: "Time",
+    axis: [ticks: true, domain: false, grid: false, labels: true]
+  )
+  |> VegaLite.encode_field(:y, "y",
+    type: :quantitative,
+    title: "Audio"
+  )
+|> VegaLite.encode_field(:color, "step", type: :nominal, legend: nil)
+|> VegaLite.encode_field(:row, "data", type: :nominal, title: "Data")
+|> VegaLite.data_from_values(chart_data)
+|> Kino.VegaLite.new()
+```
+
+```elixir
+VegaLite.new(width: 700, height: 60)
+|> VegaLite.mark(:line)  
+|> VegaLite.encode_field(:x, "x",
+    type: :quantitative,
+    title: "Time",
+    axis: [ticks: true, domain: false, grid: false, labels: true]
+  )
+  |> VegaLite.encode_field(:y, "y",
+    type: :quantitative,
+    title: "Audio"
+  )
+|> VegaLite.data_from_values(aggregated_chart_data)
+|> Kino.VegaLite.new()
+```

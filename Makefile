@@ -1,6 +1,8 @@
 # Variables
 WHISPER_DIR = c_src/todo_app/whisper.cpp
 WHISPER_LIB = $(WHISPER_DIR)/libwhisper.a
+WHISPER_REPO = https://github.com/ggml-org/whisper.cpp.git
+WHISPER_COMMIT = bf4cb4abad4e35c74b387df034cc4ac7b22e5fe6
 CXXFLAGS = -fPIC -I$(ERTS_INCLUDE_DIR) -I$(WHISPER_DIR) -std=c++11
 LDFLAGS = -dynamiclib -undefined dynamic_lookup -L$(WHISPER_DIR) -lwhisper
 
@@ -20,9 +22,20 @@ $(info TARGET: $(TARGET))
 # Default target
 all: $(WHISPER_LIB) $(TARGET)
 
+# Clone whisper.cpp at the pinned commit (not committed to git — too large)
+$(WHISPER_DIR)/Makefile:
+	git clone $(WHISPER_REPO) $(WHISPER_DIR)
+	cd $(WHISPER_DIR) && git checkout $(WHISPER_COMMIT)
+
 # Build whisper library
-$(WHISPER_LIB):
+$(WHISPER_LIB): $(WHISPER_DIR)/Makefile
 	$(MAKE) -C $(WHISPER_DIR) libwhisper.a
+
+# Whisper model for the transcription NIF (not committed to git — 148MB)
+models/ggml-base.en.bin: $(WHISPER_DIR)/Makefile
+	sh $(WHISPER_DIR)/models/download-ggml-model.sh base.en
+	mkdir -p models
+	cp $(WHISPER_DIR)/models/ggml-base.en.bin models/
 
 # Compile and link
 $(TARGET): $(OBJS) $(WHISPER_LIB)
@@ -38,5 +51,5 @@ $(BUILDDIR):
 
 # Clean up
 clean:
-	rm -f $(OBJ) $(TARGET)
+	rm -f $(OBJS) $(TARGET)
 # $(MAKE) -C $(WHISPER_DIR) clean 

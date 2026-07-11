@@ -9,4 +9,4 @@ config :todo_app, TodoWeb.Endpoint,
 config :todo_app, Oban, testing: :inline
 
 # Print only warnings and errors during test
-config :logger, level: :warning
+config :logger, level: :debug

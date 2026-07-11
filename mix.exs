@@ -76,10 +76,7 @@ defmodule TodoApp.MixProject do
   defp deps do
     deps_list = [
       {:ecto_sqlite3, "~> 0.12"},
-      {:exqlite, github: "elixir-desktop/exqlite", override: true},
-      # {:desktop, path: "../desktop"},
-      # {:desktop, "~> 1.5"},
-      {:desktop, github: "elixir-desktop/desktop"},
+      {:desktop, "~> 1.5"},
       {:desktop_deployment, github: "elixir-desktop/deployment"},
       # {:desktop_deployment, path: "../deployment", runtime: false},
 
@@ -101,15 +98,17 @@ defmodule TodoApp.MixProject do
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
       {:mix_test_watch, "~> 1.0", only: [:dev, :test], runtime: false},
 
+      # Livebook
+      {:kino_vega_lite, "~> 0.1.10", only: [:dev]},
+
       # Libraries
       {:membrane_core, "~> 1.0"},
-      {:membrane_portaudio_plugin, git: "https://github.com/johns10/membrane_portaudio_plugin"},
+      {:membrane_portaudio_plugin, "~> 0.19.6"},
       {:membrane_audio_mix_plugin, "~> 0.16"},
       {:membrane_raw_audio_format, "~> 0.12.0"},
       {:membrane_raw_audio_parser_plugin, "~> 0.4.0"},
       {:membrane_file_plugin, "~> 0.16.0"},
-      {:erlport, "~> 0.11"},
-      {:ortex, git: "https://github.com/elixir-nx/ortex"},
+      {:ortex, "~> 0.1.10"},
       {:nx, "~> 0.7"},
       {:elixir_make, "~> 0.8.4"},
       {:oban, "~> 2.17"}

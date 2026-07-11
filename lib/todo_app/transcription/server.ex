@@ -2,7 +2,7 @@ defmodule TodoApp.Transcription.Server do
   use GenServer
   require Logger
 
-  defstruct [:python_pid, :working?]
+  defstruct [:task, working?: false]
   @topic "transcription"
 
   def subscribe() do
@@ -18,18 +18,14 @@ defmodule TodoApp.Transcription.Server do
   end
 
   def init(state) do
-    path = [:code.priv_dir(:todo_app), "python"] |> Path.join()
-    {:ok, pid} = :python.start([{:python_path, to_charlist(path)}, {:python, ~c"python3"}])
-    :python.call(pid, :elixir_api, :register_handler, [self()])
-    {:ok, Map.put(state, :python_pid, pid)}
+    {:ok, state}
   end
 
   def handle_cast({:transcribe, _file_name}, %{working?: true} = state) do
-    IO.puts("bloop")
     {:noreply, state}
   end
 
-  def handle_cast({:transcribe, file_name}, %{python_pid: pid, working?: _} = state) do
+  def handle_cast({:transcribe, file_name}, state) do
     file_path = Path.join([TodoApp.recordings_dir(), file_name])
 
     case File.stat!(file_path) do
@@ -39,47 +35,43 @@ defmodule TodoApp.Transcription.Server do
         {:noreply, state}
 
       _ ->
-        :python.cast(pid, file_path)
-        {:noreply, state |> Map.put(:working?, true)}
+        task =
+          Task.async(fn ->
+            {file_path, TodoApp.Transcribe.transcribe_files([file_path])}
+          end)
+
+        {:noreply, %{state | task: task, working?: true}}
     end
   end
 
-  def handle_cast(state, :stop) do
-    Logger.error("Transcription server crashed")
-    {:noreply, state}
-  end
-
-  def handle_info({file_path, results}, state) do
+  def handle_info({ref, {file_path, results}}, %{task: %Task{ref: ref}} = state) do
+    Process.demonitor(ref, [:flush])
     Logger.info("Done Transcribing File")
-
-    text_file_path =
-      file_path
-      |> to_string()
-      |> String.replace(".raw", ".txt")
-      |> String.replace("recordings", "transcripts")
 
     text =
       results
       |> to_string()
       |> Jason.decode!()
-      |> Map.get("segments")
-      |> Enum.reduce("", fn
-        %{"speaker" => speaker, "text" => text}, acc ->
-          acc <> "# #{speaker}\n\n#{text}\n\n"
+      |> Enum.flat_map(&Map.get(&1, "transcription", []))
+      |> Enum.map_join("\n\n", &String.trim(Map.get(&1, "text", "")))
 
-        %{"text" => text}, acc ->
-          acc <> "#{text}\n\n"
-      end)
+    text_file_path =
+      file_path
+      |> String.replace(".raw", ".txt")
+      |> String.replace("recordings", "transcripts")
 
     File.write!(text_file_path, text)
     File.rm!(file_path)
     Phoenix.PubSub.broadcast(TodoApp.PubSub, @topic, :transcribed)
 
-    {:noreply, state |> Map.put(:working?, false)}
+    {:noreply, %{state | task: nil, working?: false}}
   end
 
-  def terminate(_reason, %{python_pid: pid}) do
-    :python.stop(pid)
-    nil
+  def handle_info({:DOWN, _ref, :process, _pid, reason}, state) do
+    if reason != :normal do
+      Logger.error("Transcription task failed: #{inspect(reason)}")
+    end
+
+    {:noreply, %{state | task: nil, working?: false}}
   end
 end
