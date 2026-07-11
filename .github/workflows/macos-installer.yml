@@ -13,22 +13,27 @@ on:
 permissions:
   contents: write
 
+env:
+  # Match .tool-versions (the runtime the app is tested against locally).
+  OTP_VERSION: "29.0.3"
+  ELIXIR_VERSION: "1.20.2-otp-29"
+  # OTP 29's wx driver only builds against wxWidgets 3.2.x built with
+  # --enable-compat30. Homebrew's wxWidgets (3.3, no compat30) makes OTP disable
+  # wx entirely — the app then crash-loops at launch on a missing wxe_driver.so.
+  WX_VERSION: "v3.2.6"
+
 jobs:
   macos:
     name: "Build macOS installer (.dmg)"
     runs-on: macos-15
-    timeout-minutes: 90
-    env:
-      # Match .tool-versions (the runtime the app is tested against locally).
-      OTP_VERSION: "29.0.3"
-      ELIXIR_VERSION: "1.20.2-otp-29"
+    timeout-minutes: 120
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install build dependencies (wxWidgets, cmake, autotools)
+      - name: Install build dependencies (cmake, autotools)
         run: |
           brew update
-          brew install wxwidgets cmake automake autoconf libtool coreutils
+          brew install cmake automake autoconf libtool coreutils
 
       - name: Install Rust toolchain (ortex NIF)
         uses: dtolnay/rust-toolchain@stable
@@ -38,12 +43,33 @@ jobs:
         with:
           node-version: "22"
 
-      - name: Cache asdf toolchain (Erlang/Elixir)
+      - name: Cache wxWidgets (static, compat30)
+        id: wx-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/wxWidgets-install
+          key: wxwidgets-${{ env.WX_VERSION }}-static-compat30-macos15
+
+      - name: Build wxWidgets from source
+        if: steps.wx-cache.outputs.cache-hit != 'true'
+        run: |
+          set -euo pipefail
+          git clone --depth 1 --branch "$WX_VERSION" https://github.com/wxWidgets/wxWidgets.git "$HOME/wxWidgets-src"
+          cd "$HOME/wxWidgets-src"
+          git submodule update --init --depth 1
+          # Static (--disable-shared) so wxe_driver.so is self-contained;
+          # compat30 + webview are what elixir-desktop needs.
+          ./configure --prefix="$HOME/wxWidgets-install" \
+            --enable-webview --enable-compat30 --disable-shared --disable-debug
+          make -j"$(sysctl -n hw.ncpu)"
+          make install
+
+      - name: Cache asdf toolchain (Erlang/Elixir with wx)
         id: asdf-cache
         uses: actions/cache@v4
         with:
           path: ~/.asdf
-          key: asdf-macos15-otp-${{ env.OTP_VERSION }}-elixir-${{ env.ELIXIR_VERSION }}-wx
+          key: asdf-macos15-otp-${{ env.OTP_VERSION }}-elixir-${{ env.ELIXIR_VERSION }}-${{ env.WX_VERSION }}-compat30
 
       - name: Install Erlang/Elixir with wx (asdf)
         if: steps.asdf-cache.outputs.cache-hit != 'true'
@@ -53,27 +79,35 @@ jobs:
           . "$HOME/.asdf/asdf.sh"
           asdf plugin add erlang
           asdf plugin add elixir
-          # wxWidgets from Homebrew must be visible so OTP builds :wx.
-          export PATH="$(brew --prefix wxwidgets)/bin:$PATH"
-          export KERL_CONFIGURE_OPTIONS="--disable-debug --without-javac --enable-wx"
+          # wx-config from our source-built wxWidgets must be found so OTP builds
+          # a usable :wx (with the wxe_driver.so C driver).
+          export PATH="$HOME/wxWidgets-install/bin:$PATH"
+          export KERL_CONFIGURE_OPTIONS="--with-wxdir=$HOME/wxWidgets-install --disable-debug --without-javac"
           asdf install erlang "$OTP_VERSION"
           asdf install elixir "$ELIXIR_VERSION"
 
-      - name: Verify toolchain has wx
+      - name: Verify the wx driver actually built
         run: |
           set -euo pipefail
           . "$HOME/.asdf/asdf.sh"
           asdf global erlang "$OTP_VERSION"
           asdf global elixir "$ELIXIR_VERSION"
           elixir --version
-          # Fail early if OTP was built without wx (the desktop app needs it).
-          erl -noshell -eval 'case code:ensure_loaded(wx) of {module,_}->io:format("wx OK~n"); _->halt(1) end, halt(0).'
+          # The real check: the C driver must exist, or the desktop app
+          # crash-loops at launch with {:load_driver, "No driver found"}.
+          erlroot="$(asdf where erlang "$OTP_VERSION")"
+          driver="$(ls "$erlroot"/lib/wx-*/priv/wxe_driver.so 2>/dev/null || true)"
+          if [ -z "$driver" ]; then
+            echo "wxe_driver.so was NOT built — OTP disabled wx. Check wxWidgets compat30." >&2
+            exit 1
+          fi
+          echo "wx driver present: $driver"
 
       - name: Build release + installer
         run: |
           set -euo pipefail
           . "$HOME/.asdf/asdf.sh"
-          export PATH="$(brew --prefix wxwidgets)/bin:$PATH"
+          export PATH="$HOME/wxWidgets-install/bin:$PATH"
           mix local.hex --force
           mix local.rebar --force
           mix deps.get
@@ -82,15 +116,17 @@ jobs:
           mix assets.deploy
           MIX_ENV=prod mix desktop.installer
 
-      - name: Verify the bundle is validly signed
+      - name: Verify the bundle is valid (wx driver bundled + signed)
         run: |
           set -euo pipefail
           APP="_build/prod/EarWitness.app"
+          # The wx driver must be in the packaged app, or it crash-loops.
+          ls "$APP"/Contents/Resources/lib/wx-*/priv/wxe_driver.so
           # Recursively verifies nested code + the bundle seal.
           codesign --verify --verbose "$APP"
-          # Belt-and-suspenders: no dylib/NIF may have an invalid signature
-          # (Tahoe SIGKILLs those on load). Loop via process substitution so a
-          # failure sticks and the giant precompiled-dep paths don't overflow xargs.
+          # No dylib/NIF may have an invalid signature (Tahoe SIGKILLs those on
+          # load). Loop via process substitution so a failure sticks and the
+          # giant precompiled-dep paths don't overflow xargs.
           bad=0
           while IFS= read -r -d '' f; do
             codesign -v "$f" 2>/dev/null || { echo "INVALID: $f"; bad=1; }
