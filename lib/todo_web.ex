@@ -22,7 +22,7 @@ defmodule TodoWeb do
       use Phoenix.Controller, namespace: TodoWeb
 
       import Plug.Conn
-      import TodoWeb.Gettext
+      use Gettext, backend: TodoWeb.Gettext
       alias TodoWeb.Router.Helpers, as: Routes
     end
   end
@@ -78,24 +78,26 @@ defmodule TodoWeb do
   def channel do
     quote do
       use Phoenix.Channel
-      import TodoWeb.Gettext
+      use Gettext, backend: TodoWeb.Gettext
     end
   end
 
   defp view_helpers do
     quote do
-      # Use all HTML functionality (forms, tags, etc)
-      use Phoenix.HTML
-
-      # Import LiveView helpers (live_render, live_component, live_patch, etc)
-      import Phoenix.LiveView.Helpers
+      # Core HTML functionality (escaping, attributes)
+      import Phoenix.HTML
       import Phoenix.Component
 
       # Import basic rendering functionality (render, render_layout, etc)
       import Phoenix.View
 
       import TodoWeb.ErrorHelpers
-      import TodoWeb.Gettext
+      use Gettext, backend: TodoWeb.Gettext
+
+      use Phoenix.VerifiedRoutes,
+        endpoint: TodoWeb.Endpoint,
+        router: TodoWeb.Router,
+        statics: ~w(assets images favicon.ico robots.txt)
     end
   end
 

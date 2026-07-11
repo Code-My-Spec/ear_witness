@@ -9,6 +9,7 @@ defmodule TodoApp.MixProject do
       elixir: "~> 1.14",
       elixirc_paths: elixirc_paths(Mix.env()),
       compilers: [:elixir_make] ++ Mix.compilers(),
+      listeners: [Phoenix.CodeReloader],
       start_permanent: Mix.env() == :prod,
       deps: deps(),
       aliases: aliases(),
@@ -81,12 +82,12 @@ defmodule TodoApp.MixProject do
       # {:desktop_deployment, path: "../deployment", runtime: false},
 
       # Phoenix
-      {:phoenix, "~> 1.7"},
-      {:phoenix_live_view, "~> 0.20"},
-      {:phoenix_html, "~> 3.3"},
+      {:phoenix, "~> 1.8"},
+      {:phoenix_live_view, "~> 1.2"},
+      {:phoenix_html, "~> 4.3"},
       {:phoenix_view, "~> 2.0"},
       {:phoenix_live_reload, "~> 1.4", only: [:dev]},
-      {:gettext, "~> 0.23"},
+      {:gettext, "~> 1.0"},
       {:plug_cowboy, "~> 2.6"},
       {:jason, "~> 1.4"},
 
@@ -106,11 +107,11 @@ defmodule TodoApp.MixProject do
       {:membrane_portaudio_plugin, "~> 0.19.6"},
       {:membrane_audio_mix_plugin, "~> 0.16"},
       {:membrane_raw_audio_format, "~> 0.12.0"},
-      {:membrane_raw_audio_parser_plugin, "~> 0.4.0"},
-      {:membrane_file_plugin, "~> 0.16.0"},
+      {:membrane_raw_audio_parser_plugin, "~> 0.5.0"},
+      {:membrane_file_plugin, "~> 0.17"},
       {:ortex, "~> 0.1.10"},
       {:nx, "~> 0.7"},
-      {:elixir_make, "~> 0.8.4"},
+      {:elixir_make, "~> 0.10"},
       {:oban, "~> 2.17"}
     ]
 
