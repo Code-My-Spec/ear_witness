@@ -6,19 +6,19 @@ defmodule EarWitnessWeb.McpServer.Server do
   `EarWitnessWeb.McpServer`'s moduledoc). No network transport is ever
   configured for it.
 
-  Not started by `EarWitnessWeb.Application` yet: the desktop app's own
-  stdin/stdout aren't a terminal an MCP client can attach to the way a
-  `mix run` or release entry point's are, so wiring this into the
-  standard supervision tree needs a dedicated launch path (a release
-  command / escript) rather than piggybacking on the GUI app's boot.
-  Until that lands, start it explicitly for manual/QA verification:
-
-      Application.ensure_all_started(:ear_witness)
-      {:ok, _pid} = EarWitnessWeb.McpServer.Server.start_link(transport: :stdio)
+  Started by `EarWitnessWeb.Application` **only** when the app is launched
+  as a stdio MCP subprocess — i.e. an AI assistant's client spawns the
+  EarWitness binary with `EARWITNESS_MCP_STDIO=1`. In that mode the app
+  boots just Repo + this server over stdin/stdout, no Phoenix endpoint and
+  no desktop window (see `EarWitnessWeb.Application.start/2` and
+  `priv/mcp/earwitness.mcp.json.example`). A normal GUI/test/QA boot leaves
+  that env var unset and never starts the stdio transport, because Anubis's
+  stdio transport `{:stop, :normal}`s on stdin EOF and a boot with no
+  attached client has dead stdin.
 
   The tool functions themselves (`EarWitnessWeb.McpServer.list_tools/0`
-  and friends) work standalone, without this process running — that is
-  what the story 868 specs drive directly.
+  and friends) also work standalone, without this process running — that
+  is what the story 868 specs drive directly.
   """
 
   # Version is a literal, not `Mix.Project.config()[:version]` — this lib

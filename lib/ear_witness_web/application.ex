@@ -30,23 +30,46 @@ defmodule EarWitnessWeb.Application do
     # Oban) starts — releases have no separate `mix ecto.migrate` step.
     EarWitness.Repo.migrate()
 
-    {:ok, _} = Supervisor.start_child(sup, EarWitnessWeb.Sup)
+    if mcp_stdio_mode?() do
+      # Launched by an AI assistant as a stdio MCP subprocess (see the
+      # anubis-mcp ADR, story 868). Serve ONLY the read-mostly tool surface
+      # over stdin/stdout — no Phoenix endpoint (a second listener would
+      # clash with a running GUI instance) and no desktop window. The tools
+      # reach the same on-disk SQLite DB through Repo, which is already up.
+      #
+      # Gated on an env var because Anubis's stdio transport always starts
+      # and `{:stop, :normal}`s on stdin EOF: a normal GUI/test/QA boot has
+      # no attached client, so its dead stdin would EOF-loop the transport.
+      # An MCP client's launch command sets EARWITNESS_MCP_STDIO; see
+      # priv/mcp/earwitness.mcp.json.example.
+      {:ok, _} = Supervisor.start_child(sup, {EarWitnessWeb.McpServer.Server, transport: :stdio})
+      {:ok, sup}
+    else
+      {:ok, _} = Supervisor.start_child(sup, EarWitnessWeb.Sup)
 
-    {:ok, _} =
-      Supervisor.start_child(sup, {
-        Desktop.Window,
-        [
-          app: @app,
-          id: EarWitnessWindow,
-          title: "EarWitness",
-          size: {600, 500},
-          icon: "icon.png",
-          menubar: EarWitness.MenuBar,
-          icon_menu: EarWitness.Menu,
-          url: &EarWitnessWeb.Endpoint.url/0
-        ]
-      })
+      {:ok, _} =
+        Supervisor.start_child(sup, {
+          Desktop.Window,
+          [
+            app: @app,
+            id: EarWitnessWindow,
+            title: "EarWitness",
+            size: {600, 500},
+            icon: "icon.png",
+            menubar: EarWitness.MenuBar,
+            icon_menu: EarWitness.Menu,
+            url: &EarWitnessWeb.Endpoint.url/0
+          ]
+        })
+
+      {:ok, sup}
+    end
   end
+
+  # An AI assistant's MCP client sets this when it launches EarWitness as a
+  # stdio subprocess; everyday GUI/test/QA boots leave it unset and never
+  # start the stdio transport.
+  defp mcp_stdio_mode?, do: System.get_env("EARWITNESS_MCP_STDIO") in ~w(1 true yes)
 
   def config_change(changed, _new, removed) do
     EarWitnessWeb.Endpoint.config_change(changed, removed)

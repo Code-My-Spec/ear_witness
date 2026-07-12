@@ -1,0 +1,32 @@
+{
+  "_comment": [
+    "Example MCP client config (e.g. Claude Code / Claude Desktop) for the",
+    "EarWitness local assistant tools. The client launches EarWitness as a",
+    "stdio subprocess; EARWITNESS_MCP_STDIO=1 makes it boot Repo + the MCP",
+    "server ONLY (no Phoenix endpoint, no desktop window) and speak JSON-RPC",
+    "over stdin/stdout. See EarWitnessWeb.Application.start/2 and the",
+    "anubis-mcp ADR. Access is off by default — enable it in EarWitness",
+    "Settings first (it is instantly revocable there).",
+    "",
+    "PRODUCTION: point 'command' at the installed release binary (the path",
+    "below is illustrative for a macOS app bundle). RELEASE stdout is clean",
+    "JSON-RPC.",
+    "",
+    "DEV: you can instead use mix, but keep stdout clean — the JSON-RPC",
+    "stream shares stdout, so route logs to stderr and silence compile noise:",
+    "  \"command\": \"mix\",",
+    "  \"args\": [\"run\", \"--no-halt\"],",
+    "  \"env\": { \"EARWITNESS_MCP_STDIO\": \"1\", \"MIX_QUIET\": \"1\" },",
+    "  \"cwd\": \"/absolute/path/to/desktop-example-app-main\"",
+    "(compile the project once beforehand so no build output hits stdout)."
+  ],
+  "mcpServers": {
+    "earwitness": {
+      "command": "/Applications/EarWitness.app/Contents/MacOS/ear_witness",
+      "args": ["start"],
+      "env": {
+        "EARWITNESS_MCP_STDIO": "1"
+      }
+    }
+  }
+}
