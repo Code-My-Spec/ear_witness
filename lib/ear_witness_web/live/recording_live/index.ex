@@ -114,6 +114,11 @@ defmodule EarWitnessWeb.RecordingLive.Index do
               />
               <button type="submit" class="btn btn-sm">Create case</button>
             </form>
+
+            <div :if={@collection_error} data-test="collection-error" class="alert alert-error mt-2">
+              <.icon name="hero-exclamation-triangle" class="size-5" />
+              {@collection_error}
+            </div>
             <%!--
               `EarWitnessSpex.CollectionSteps.collection_id/2` resolves a
               case's id by scanning for `data-collection-id="..."` and
@@ -236,6 +241,7 @@ defmodule EarWitnessWeb.RecordingLive.Index do
      socket
      |> assign(
        import_error: nil,
+       collection_error: nil,
        capture_error: nil,
        capturing?: false,
        capture_ref: nil,
@@ -271,8 +277,11 @@ defmodule EarWitnessWeb.RecordingLive.Index do
 
   def handle_event("create_collection", %{"collection" => params}, socket) do
     case Recordings.create_collection(params) do
-      {:ok, _collection} -> {:noreply, reload_library(socket)}
-      {:error, _changeset} -> {:noreply, socket}
+      {:ok, _collection} ->
+        {:noreply, socket |> assign(:collection_error, nil) |> reload_library()}
+
+      {:error, changeset} ->
+        {:noreply, assign(socket, :collection_error, collection_error_message(changeset))}
     end
   end
 
@@ -285,6 +294,16 @@ defmodule EarWitnessWeb.RecordingLive.Index do
     {:ok, recording} = Recordings.get_recording(id)
     {:ok, _recording} = Recordings.restore_recording(recording)
     {:noreply, reload_library(socket)}
+  end
+
+  # Turns a rejected collection changeset into a human message for the
+  # create-case form, so a blank/invalid name surfaces an error instead of
+  # silently no-opping (issue b656b47c). Falls back to a generic message.
+  defp collection_error_message(changeset) do
+    case changeset.errors[:name] do
+      {msg, _opts} -> "Case name #{msg}."
+      _ -> "That case couldn't be created."
+    end
   end
 
   defp handle_import_result(socket, result) do

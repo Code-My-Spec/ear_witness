@@ -199,9 +199,15 @@ defmodule EarWitnessWeb.RecordingLive.Show do
     {:noreply, assign(socket, :recording, recording)}
   end
 
-  def handle_event("set_collections", %{"recording" => params}, socket) do
+  def handle_event("set_collections", params, socket) do
+    # Unchecking the last checked box submits a form with no
+    # `recording[collection_ids][]` field at all, so `params` carries no
+    # "recording" key. Default it to %{} rather than pattern-matching on
+    # it, so clearing the final case removes membership instead of the
+    # event silently failing and the box snapping back (issue 4df46bc8).
     ids =
       params
+      |> Map.get("recording", %{})
       |> Map.get("collection_ids", [])
       |> List.wrap()
       |> Enum.reject(&(&1 == ""))
