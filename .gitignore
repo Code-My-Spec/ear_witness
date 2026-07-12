@@ -70,3 +70,9 @@ npm-debug.log
 # Claude Code local state
 .claude/settings.local.json
 .claude/scheduled_tasks.lock
+
+# Build artifacts / fetched content — ignore as both dirs AND symlinks
+# (a bare `deps` symlink slips past `/deps/`; this caused a self-loop merge).
+/deps
+/models
+/c_src/ear_witness/whisper.cpp

@@ -1,1 +1,0 @@
-/Users/johndavenport/Documents/github/desktop-example-app-main/c_src/ear_witness/whisper.cpp
