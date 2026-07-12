@@ -29,6 +29,7 @@
 #include <erl_nif.h>
 
 #include <cctype>
+#include <condition_variable>
 #include <cstdio>
 #include <cstring>
 #include <mutex>
@@ -248,6 +249,178 @@ bool find_linux_monitor_device(ma_device_id *out_id) {
 }
 #endif
 
+// ---------------------------------------------------------------------------
+// Playback (feed path) — plays a WAV file OUT to a device. Used to inject the
+// recording notice (story 871) into the "EarWitness Microphone" virtual device
+// so meeting apps (Zoom/Teams/Meet) that have selected it as their microphone
+// hear the notice on the user's outgoing voice channel. See
+// native/vmic-macos/README.md and EarWitness.Audio.VirtualMic.
+// ---------------------------------------------------------------------------
+
+// Holds the decoded PCM for one synchronous playback. Lives on the calling
+// thread's stack for the duration of play_to_device — the device is fully
+// uninitialized (which joins the audio thread) before the state goes out of
+// scope, so the audio callback can never outlive it.
+struct PlaybackState {
+  std::vector<ma_int16> samples;  // interleaved, in the WAV's own channel count
+  ma_uint32 channels = 1;
+  size_t cursor = 0;  // index into samples (advances channels-at-a-time per frame)
+  std::mutex mutex;
+  std::condition_variable cv;
+  bool finished = false;
+};
+
+void playback_data_callback(ma_device *device, void *output, const void *input,
+                            ma_uint32 frame_count) {
+  (void)input;
+  auto *state = static_cast<PlaybackState *>(device->pUserData);
+  if (state == nullptr || output == nullptr) {
+    return;
+  }
+
+  auto *out = static_cast<ma_int16 *>(output);
+  const ma_uint32 channels = state->channels;
+  const size_t total = state->samples.size();
+
+  std::lock_guard<std::mutex> lock(state->mutex);
+  ma_uint32 frames_written = 0;
+  for (; frames_written < frame_count && state->cursor + channels <= total; frames_written++) {
+    for (ma_uint32 c = 0; c < channels; c++) {
+      out[static_cast<size_t>(frames_written) * channels + c] = state->samples[state->cursor + c];
+    }
+    state->cursor += channels;
+  }
+  // Zero-fill any remaining frames in this buffer (end of clip, or underrun).
+  for (size_t i = static_cast<size_t>(frames_written) * channels;
+       i < static_cast<size_t>(frame_count) * channels; i++) {
+    out[i] = 0;
+  }
+
+  if (state->cursor + channels > total && !state->finished) {
+    state->finished = true;
+    state->cv.notify_all();
+  }
+}
+
+bool read_u16(FILE *file, ma_uint16 *out) { return std::fread(out, sizeof(*out), 1, file) == 1; }
+bool read_u32(FILE *file, ma_uint32 *out) { return std::fread(out, sizeof(*out), 1, file) == 1; }
+
+// Minimal RIFF/WAVE reader for 16-bit PCM (the only format EarWitness
+// produces — see write_wav above and WavHeader.parse/1). Fills *samples with
+// interleaved s16 and reports the source channel count / sample rate so the
+// playback device can be configured to match (miniaudio then converts to the
+// output device's native format). Returns false on any unsupported/malformed
+// file rather than guessing.
+bool read_wav(const std::string &path, std::vector<ma_int16> *samples, ma_uint32 *channels,
+              ma_uint32 *sample_rate) {
+  FILE *file = std::fopen(path.c_str(), "rb");
+  if (file == nullptr) {
+    return false;
+  }
+
+  char riff[4];
+  char wave[4];
+  ma_uint32 riff_size = 0;
+  bool ok = std::fread(riff, 1, 4, file) == 4 && read_u32(file, &riff_size) &&
+            std::fread(wave, 1, 4, file) == 4;
+  if (!ok || std::memcmp(riff, "RIFF", 4) != 0 || std::memcmp(wave, "WAVE", 4) != 0) {
+    std::fclose(file);
+    return false;
+  }
+
+  ma_uint16 audio_format = 0;
+  ma_uint16 num_channels = 0;
+  ma_uint16 bits_per_sample = 0;
+  ma_uint32 rate = 0;
+  bool have_fmt = false;
+  bool have_data = false;
+
+  while (true) {
+    char chunk_id[4];
+    ma_uint32 chunk_size = 0;
+    if (std::fread(chunk_id, 1, 4, file) != 4 || !read_u32(file, &chunk_size)) {
+      break;
+    }
+
+    if (std::memcmp(chunk_id, "fmt ", 4) == 0) {
+      ma_uint32 byte_rate = 0;
+      ma_uint16 block_align = 0;
+      ok = read_u16(file, &audio_format) && read_u16(file, &num_channels) && read_u32(file, &rate) &&
+           read_u32(file, &byte_rate) && read_u16(file, &block_align) &&
+           read_u16(file, &bits_per_sample);
+      if (!ok) {
+        break;
+      }
+      if (chunk_size > 16) {
+        std::fseek(file, static_cast<long>(chunk_size - 16), SEEK_CUR);
+      }
+      have_fmt = true;
+    } else if (std::memcmp(chunk_id, "data", 4) == 0) {
+      const size_t sample_count = chunk_size / sizeof(ma_int16);
+      samples->resize(sample_count);
+      have_data = sample_count == 0 ||
+                  std::fread(samples->data(), 1, chunk_size, file) == chunk_size;
+      break;
+    } else {
+      // Skip unknown chunk (RIFF chunks are padded to an even byte count).
+      std::fseek(file, static_cast<long>(chunk_size + (chunk_size & 1u)), SEEK_CUR);
+    }
+  }
+
+  std::fclose(file);
+  if (!have_fmt || !have_data || bits_per_sample != 16 || audio_format != 1 || num_channels == 0) {
+    return false;
+  }
+  *channels = num_channels;
+  *sample_rate = rate;
+  return true;
+}
+
+// Plays `path` synchronously to the playback device identified by `device_id`
+// (null = system default). Blocks (on a dirty IO scheduler — see nif_funcs)
+// until the whole clip has been pushed to the device, then tears the device
+// down. Returns :ok or {:error, reason}.
+ERL_NIF_TERM play_to_device(ErlNifEnv *env, const ma_device_id *device_id, const std::string &path) {
+  PlaybackState state;
+  ma_uint32 channels = 1;
+  ma_uint32 rate = kSampleRate;
+  if (!read_wav(path, &state.samples, &channels, &rate)) {
+    return make_error(env, "wav_read_failed");
+  }
+  state.channels = channels;
+
+  if (state.samples.empty()) {
+    return enif_make_atom(env, "ok");  // Nothing to play; treat as a no-op success.
+  }
+
+  ma_device_config config = ma_device_config_init(ma_device_type_playback);
+  config.playback.pDeviceID = device_id;
+  config.playback.format = ma_format_s16;
+  config.playback.channels = channels;
+  config.sampleRate = rate;
+  config.dataCallback = playback_data_callback;
+  config.pUserData = &state;
+
+  ma_device device;
+  if (ma_device_init(nullptr, &config, &device) != MA_SUCCESS) {
+    return make_error(env, "device_init_failed");
+  }
+  if (ma_device_start(&device) != MA_SUCCESS) {
+    ma_device_uninit(&device);
+    return make_error(env, "device_start_failed");
+  }
+
+  {
+    std::unique_lock<std::mutex> lock(state.mutex);
+    state.cv.wait(lock, [&state] { return state.finished; });
+  }
+
+  // ma_device_uninit stops and joins the audio thread synchronously, so no
+  // further callbacks touch `state` after this returns.
+  ma_device_uninit(&device);
+  return enif_make_atom(env, "ok");
+}
+
 }  // namespace
 
 static ERL_NIF_TERM nif_list_devices(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[]) {
@@ -409,6 +582,52 @@ static ERL_NIF_TERM nif_stop_capture(ErlNifEnv *env, int argc, const ERL_NIF_TER
   return enif_make_atom(env, "ok");
 }
 
+// Plays a WAV file to the system default playback device.
+static ERL_NIF_TERM nif_play_wav(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[]) {
+  (void)argc;
+  std::string path;
+  if (!get_path(env, argv[0], &path)) {
+    return enif_make_badarg(env);
+  }
+  return play_to_device(env, nullptr, path);
+}
+
+// Plays a WAV file to the first PLAYBACK device whose name contains
+// `device_name` (case-insensitive substring) — e.g. "EarWitness Microphone",
+// the virtual device's output side. Returns {:error, :device_not_found} when
+// no playback device matches. This is the seam story 871 uses to inject the
+// recording notice into the outgoing voice channel.
+static ERL_NIF_TERM nif_play_wav_to_device(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[]) {
+  (void)argc;
+  std::string path;
+  std::string device_name;
+  if (!get_path(env, argv[0], &path) || !get_path(env, argv[1], &device_name)) {
+    return enif_make_badarg(env);
+  }
+
+  DeviceLister lister;
+  if (!lister.initialized) {
+    return make_error(env, "device_init_failed");
+  }
+
+  ma_device_info *capture_infos = nullptr;
+  ma_uint32 capture_count = 0;
+  ma_device_info *playback_infos = nullptr;
+  ma_uint32 playback_count = 0;
+  if (ma_context_get_devices(&lister.context, &playback_infos, &playback_count, &capture_infos,
+                              &capture_count) != MA_SUCCESS) {
+    return make_error(env, "device_init_failed");
+  }
+
+  for (ma_uint32 i = 0; i < playback_count; i++) {
+    if (contains_ci(playback_infos[i].name, device_name.c_str())) {
+      ma_device_id device_id = playback_infos[i].id;
+      return play_to_device(env, &device_id, path);
+    }
+  }
+  return make_error(env, "device_not_found");
+}
+
 static ERL_NIF_TERM nif_loopback_available(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[]) {
   (void)argc;
   (void)argv;
@@ -439,6 +658,10 @@ static ErlNifFunc nif_funcs[] = {
     {"start_loopback_capture", 1, nif_start_loopback_capture},
     {"stop_capture", 1, nif_stop_capture},
     {"loopback_available?", 0, nif_loopback_available},
+    // Playback blocks for the length of the clip, so it runs on a dirty IO
+    // scheduler to avoid stalling a normal BEAM scheduler thread.
+    {"play_wav", 1, nif_play_wav, ERL_NIF_DIRTY_JOB_IO_BOUND},
+    {"play_wav_to_device", 2, nif_play_wav_to_device, ERL_NIF_DIRTY_JOB_IO_BOUND},
 };
 
 ERL_NIF_INIT(Elixir.EarWitness.Audio.Miniaudio, nif_funcs, on_load, NULL, NULL, NULL)

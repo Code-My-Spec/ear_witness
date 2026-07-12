@@ -83,4 +83,23 @@ defmodule EarWitness.Audio.Miniaudio do
   @doc "Whether system-output loopback capture is available on this machine."
   @spec loopback_available?() :: boolean()
   def loopback_available?, do: false
+
+  @doc """
+  Plays a 16-bit PCM WAV file to the system default playback device. Blocks
+  until the whole clip has been pushed to the device. The WAV's own channel
+  count / sample rate are honored (miniaudio resamples to the device's native
+  format).
+  """
+  @spec play_wav(Path.t()) :: :ok | {:error, atom()}
+  def play_wav(_path), do: :erlang.nif_error(:nif_library_not_loaded)
+
+  @doc """
+  Plays a 16-bit PCM WAV file to the first PLAYBACK device whose name contains
+  `device_name` (case-insensitive substring) — e.g. `"EarWitness Microphone"`,
+  the virtual microphone's output side. Returns `{:error, :device_not_found}`
+  when no playback device matches. This is the feed seam
+  `EarWitness.Audio.VirtualMic` and story 871 build on.
+  """
+  @spec play_wav_to_device(Path.t(), String.t()) :: :ok | {:error, atom()}
+  def play_wav_to_device(_path, _device_name), do: :erlang.nif_error(:nif_library_not_loaded)
 end
