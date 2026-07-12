@@ -25,6 +25,13 @@ defmodule EarWitnessWeb.TranscriptLive.SpeakerPanel do
         <h2 class="card-title">
           <.icon name="hero-user-group" class="size-5 text-primary" /> Speakers
         </h2>
+        <p data-test="diarization-caveat" class="flex items-start gap-1.5 text-xs opacity-70">
+          <.icon name="hero-information-circle" class="size-4 shrink-0" />
+          <span>
+            Speakers are detected automatically and may be mislabelled or
+            merged — reassign any segment to the right speaker below.
+          </span>
+        </p>
         <div class="flex flex-col gap-3">
           <div :for={{speaker, index} <- Enum.with_index(@speakers)} class="flex flex-wrap items-center gap-2">
             <%!--

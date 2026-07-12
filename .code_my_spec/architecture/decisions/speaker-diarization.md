@@ -1,9 +1,32 @@
 # Speaker diarization via ONNX models (ortex) + clustering
 
 ## Status
-Implemented (`EarWitness.Speakers.Diarizer.Onnx` and friends under
-`lib/ear_witness/speakers/diarizer/`) — see "Implementation notes" below
-for what shipped versus what remains scoped out.
+Implemented with a documented v1 accuracy limitation (PM decision
+2026-07-12) — `EarWitness.Speakers.Diarizer.Onnx` and friends under
+`lib/ear_witness/speakers/diarizer/`. See "Implementation notes" and
+"Known limitation (v1)" below.
+
+## Known limitation (v1)
+Automatic *within-recording* speaker separation is best-effort and can
+mislabel or merge voices. QA on real two-voice audio (stories 862/7339,
+issues d0d3bfa7 + a48bff60) found: the first pass collapsed all turns to
+one speaker; clustering on per-turn WeSpeaker embeddings fixed the
+collapse but still scrambles short turns across the detected speakers.
+Root cause is embedding quality on short (few-second) turns — the
+whole-recording embedding used for *cross-recording* recognition is
+stable (that path works reliably), but per-turn embeddings on brief
+synthetic/quiet turns are too noisy for the clustering to separate
+cleanly. Production-grade accuracy needs pyannote's full sliding-window
++ overlap-aware pipeline, deliberately out of scope for this simplified
+on-device version.
+
+**Ships anyway because the feature is usable:** speakers are detected and
+the user manually reassigns any segment to the right speaker (works),
+names persist, and cross-recording voice recognition works. The UI
+carries a caveat (`[data-test="diarization-caveat"]` in SpeakerPanel) so
+users aren't misled into trusting raw auto-labels. Improving
+within-recording accuracy is tracked as future work (issues d0d3bfa7,
+a48bff60).
 
 ## Context
 Hearing transcripts are only quotable if you can tell who said what
