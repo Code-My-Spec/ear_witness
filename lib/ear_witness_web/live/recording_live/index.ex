@@ -253,10 +253,20 @@ defmodule EarWitnessWeb.RecordingLive.Index do
         |> assign(capturing?: false, capture_ref: nil, capture_channels: channels)
         |> reload_library()
 
-      {:error, _reason} ->
-        assign(socket, capturing?: false, capture_ref: nil)
+      {:error, reason} ->
+        # Never swallow a failed capture silently — the user just lost a
+        # recording and must be told (story-860 QA finding).
+        assign(socket,
+          capturing?: false,
+          capture_ref: nil,
+          capture_error: "Recording could not be saved (#{format_capture_error(reason)})."
+        )
     end
   end
+
+  defp format_capture_error(:invalid_audio_file), do: "the captured audio file was not readable"
+  defp format_capture_error(%Ecto.Changeset{}), do: "it could not be added to the library"
+  defp format_capture_error(other), do: inspect(other)
 
   defp reload_library(socket) do
     assign(socket,

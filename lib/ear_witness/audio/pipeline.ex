@@ -16,6 +16,8 @@ defmodule EarWitness.Audio.Pipeline do
 
   @fixture_sample_rate 16_000
   @fixture_num_samples 8_000
+  # Must match Pipeline.Microphone's PortAudio source config.
+  @capture_sample_rate 16_000
 
   @doc "Lists available microphone input devices — fixture devices in the `:fixture` test seam."
   @spec input_devices() :: [map()]
@@ -65,11 +67,59 @@ defmodule EarWitness.Audio.Pipeline do
 
       %{kind: :real, pipeline_pid: pid, path: path, channels: channels} ->
         Membrane.Pipeline.terminate(pid)
+        finalize_wav(path)
         {:ok, %{channels: channels, path: path}}
 
       %{kind: :fixture, path: path, channels: channels} ->
         {:ok, %{channels: channels, path: path}}
     end
+  end
+
+  # Membrane.File.Sink writes the PortAudio source's raw f32le samples with
+  # no container — downstream (WavHeader.parse, the whisper engine, import
+  # normalization) all expect a real PCM16 WAV, so finalize the capture into
+  # one. Found by story-860 QA against the real microphone path (the
+  # :fixture seam already produced valid WAV, which is why no spec caught
+  # it). Skips files that already carry a RIFF header.
+  defp finalize_wav(path) do
+    with {:ok, <<head::binary-size(4), _rest::binary>> = raw} when head != "RIFF" <-
+           File.read(path) do
+      pcm16 = f32le_to_s16le(raw)
+      File.write!(path, pcm16_wav(pcm16, @capture_sample_rate))
+    else
+      _ -> :ok
+    end
+  end
+
+  defp f32le_to_s16le(raw) do
+    for <<sample::float-little-32 <- raw>>, into: <<>> do
+      clamped = min(max(sample, -1.0), 1.0)
+      <<round(clamped * 32_767)::little-signed-16>>
+    end
+  end
+
+  defp pcm16_wav(data, sample_rate) do
+    channels = 1
+    bits_per_sample = 16
+    block_align = channels * div(bits_per_sample, 8)
+    byte_rate = sample_rate * block_align
+    data_size = byte_size(data)
+
+    <<
+      "RIFF",
+      36 + data_size::little-32,
+      "WAVE",
+      "fmt ",
+      16::little-32,
+      1::little-16,
+      channels::little-16,
+      sample_rate::little-32,
+      byte_rate::little-32,
+      block_align::little-16,
+      bits_per_sample::little-16,
+      "data",
+      data_size::little-32
+    >> <> data
   end
 
   defp start(source, path) do

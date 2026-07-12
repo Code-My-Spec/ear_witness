@@ -1,0 +1,59 @@
+Story 860 QA — on-device / no-network transcription evidence
+================================================================
+
+Source inspected: lib/ear_witness/transcription/engine.ex
+
+  defmodule EarWitness.Transcription.Engine do
+    @moduledoc """
+    Invokes the bundled whisper.cpp binary (via the `EarWitness.Transcribe`
+    NIF) against a normalized audio file and returns its decoded JSON
+    output. ...
+    """
+
+    def transcribe(audio_path, _opts \\ []) do
+      [audio_path]
+      |> EarWitness.Transcribe.transcribe_files()
+      |> to_string()
+      |> Jason.decode()
+    end
+  end
+
+Observations:
+- The transcription call path is Worker (Oban job) -> Engine.transcribe/1 ->
+  EarWitness.Transcribe.transcribe_files/1 (a NIF wrapping the bundled
+  whisper.cpp binary). No HTTP client (Req/Finch/HTTPoison/Tesla), no API
+  key config, and no external service reference appears anywhere in this
+  call path.
+- No network request was observed or implied anywhere in the UI during
+  transcription (no "connecting", no external URL, no API key field in
+  Settings related to transcription).
+- Real transcription latency was observed (single-digit seconds for an
+  8-second clip; not instantaneous), consistent with an actual on-device
+  whisper.cpp base.en run rather than a canned/mocked response — output
+  text for the 8s "This is a test recording..." clip came back garbled
+  ("This is a tactical infinite unit with quality of shank question." /
+  "Tasting one digit, the quick round facts are called 'Ode to the
+  Dark'.") which is typical base.en-model-on-synthetic-TTS-audio behavior,
+  not a fixture string.
+- No traffic sniffing (mitmproxy/tcpdump) was performed — this is a code
+  read + behavioral observation only, per the QA prompt's guidance that
+  sniffing was not required.
+
+Raw live-capture file inspection (separate finding, filed as issue
+f0bc6d84-875b-4314-8f85-3f2798ed8c02):
+
+  $ file ~/Documents/Discussit/recordings/d8e8fc02-7eef-4bdd-a47e-fd566b0e462d.wav
+  .../d8e8fc02-7eef-4bdd-a47e-fd566b0e462d.wav: data
+
+  $ afinfo ~/Documents/Discussit/recordings/d8e8fc02-7eef-4bdd-a47e-fd566b0e462d.wav
+  Fail: AudioFileOpenURL failed
+
+  $ xxd ~/Documents/Discussit/recordings/d8e8fc02-7eef-4bdd-a47e-fd566b0e462d.wav | head -5
+  00000000: 1463 d0ba 043c 13bb 686e 0abb 128d f4ba  .c...<..hn......
+  00000010: 74a2 0aba 5352 ba39 1376 0d3a d26d 3d3a  t...SR.9.v.:.m=:
+  ...
+
+  No "RIFF"/"WAVE" magic bytes — confirms the Membrane capture pipeline
+  writes raw float32 PCM samples with no WAV container, which is why
+  WavHeader.parse/1 (and therefore finish_live_capture/1) always fails
+  for live captures.

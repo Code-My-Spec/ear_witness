@@ -89,6 +89,13 @@ defmodule EarWitnessWeb.RecordingLive.Show do
             {@transcript.status}
           </div>
           <div :if={@transcript && @transcript.status == :completed} data-test="transcript" class="space-y-2">
+            <p
+              :if={@transcript.segments == []}
+              data-test="transcript-empty"
+              class="text-sm opacity-70 italic"
+            >
+              No speech was detected in this recording.
+            </p>
             <div :for={segment <- @transcript.segments} data-test="transcript-segment" data-segment-id={segment.id} class="flex gap-2">
               <span data-test="segment-timestamp" class="opacity-60">
                 {Format.duration(segment.start_offset / 1000)}
