@@ -1,0 +1,95 @@
+name: "Windows Installer"
+
+# Builds the EarWitness Windows (x64) NSIS installer and, on a version tag,
+# publishes it to the same GitHub Release as the other platforms.
+#
+# Notes:
+# - The official Windows OTP ships a working wx (verified), so no wxWidgets
+#   build is needed here.
+# - The whisper transcription NIF is skipped on Windows (no-op Makefile.win);
+#   transcription is unavailable until the model work lands, same as elsewhere.
+on:
+  push:
+    branches: ["master"]
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  OTP_VERSION: "29.0.3"
+  ELIXIR_VERSION: "1.20.2-otp-29"
+
+jobs:
+  windows:
+    name: "Build Windows installer (.exe)"
+    runs-on: windows-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Erlang/Elixir (with wx)
+        uses: erlef/setup-beam@v1
+        with:
+          otp-version: ${{ env.OTP_VERSION }}
+          elixir-version: ${{ env.ELIXIR_VERSION }}
+
+      - name: Verify wx is available
+        shell: pwsh
+        run: |
+          $code = 'case (catch wx:new()) of {wx_ref,_,_,_} -> io:format("WX_OK~n"); O -> io:format("WX_FAIL ~p~n",[O]), halt(1) end, halt().'
+          erl -noshell -eval $code
+
+      - name: Set up MSVC dev environment (exqlite nmake + Rust link)
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
+      - name: Install packaging tools (NSIS, ImageMagick)
+        shell: pwsh
+        run: |
+          choco install nsis --no-progress -y
+          choco install imagemagick --no-progress -y
+          # Make them available to later steps.
+          "C:\Program Files (x86)\NSIS" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+
+      - name: Show toolchain
+        shell: pwsh
+        run: |
+          elixir --version
+          rustc --version
+          node --version
+          where.exe makensis
+          where.exe magick
+
+      - name: Build release + installer
+        shell: pwsh
+        env:
+          MIX_ENV: prod
+        run: |
+          mix local.hex --force
+          mix local.rebar --force
+          mix deps.get
+          Push-Location assets; npm install; Pop-Location
+          mix assets.setup
+          mix assets.deploy
+          mix desktop.installer
+
+      - name: Locate the .exe installer
+        shell: pwsh
+        run: |
+          Get-ChildItem _build\prod\*.exe | Select-Object -First 1 | ForEach-Object { "Built: $($_.FullName)" }
+
+      - name: Upload installer artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: EarWitness-windows-exe
+          path: _build/prod/*.exe
+
+      - name: Publish to GitHub Release (tags only)
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: _build/prod/*.exe
+          fail_on_unmatched_files: true

@@ -1,0 +1,13 @@
+# Windows build (nmake). elixir_make runs `nmake /F Makefile.win` on Windows.
+#
+# The whisper.cpp transcription NIF is a gcc/CMake build that targets Unix
+# toolchains; building it on Windows (MSVC vs mingw, ERTS import libs) is a
+# separate effort, and transcription is already unavailable in releases until
+# the whisper model is bundled. So this is intentionally a no-op: the app and
+# installer build without the NIF, and EarWitness.Transcribe tolerates its
+# absence. Real Windows transcription is tracked with the model work.
+all:
+	@echo Skipping native whisper NIF on Windows (transcription unavailable in this build).
+
+clean:
+	@echo Nothing to clean.
