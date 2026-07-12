@@ -10,11 +10,14 @@ defmodule EarWitness.Models.Catalog do
 
     * `"large-v3-turbo"` — best accuracy, the recommended default. Not
       bundled (a ~1.6GB file); `EarWitness.Models.Downloader` fetches it on
-      first use. The download URL below is the real upstream location; the
-      checksum is pinned to the small stand-in artifact this project
-      currently tests against (`test/fixtures/models/large-v3-turbo-stub.bin`)
-      rather than a real 1.6GB file's checksum — update both together once
-      the app ships a real hosted copy.
+      first use. The download URL is the real upstream location and the
+      checksum is the real hosted file's SHA-256 (HuggingFace's
+      `X-Linked-Etag` / git-LFS oid for `ggml-large-v3-turbo.bin`), so a
+      real download verifies in production. Tests replay a small stub body
+      via `ReqCassette`, so `config/test.exs` overrides this model's
+      expected checksum with the stub's hash
+      (`:ear_witness, :model_checksum_overrides`) — see
+      `EarWitness.Models` and `EarWitness.Models.Downloader`.
     * `"base"` — English-only, smaller and faster. Ships bundled at
       `models/ggml-base.en.bin` (repo root, fetched by `make
       models/ggml-base.en.bin` — see `.code_my_spec/devops/setup.md`), so
@@ -42,7 +45,7 @@ defmodule EarWitness.Models.Catalog do
       default: true,
       download_url:
         "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo.bin",
-      checksum: "011c3bdd860284902853c2591486a51f6f193b152c1817a048d97ab624cb8121"
+      checksum: "1fc70f774d38eb169993ac391eea357ef47c88757ef72ee5943879b7e8e2bc69"
     },
     %{
       id: "base",
@@ -67,6 +70,14 @@ defmodule EarWitness.Models.Catalog do
   @doc "The id of the catalog's recommended default model."
   @spec default_model_id() :: String.t()
   def default_model_id, do: Enum.find(@models, & &1.default).id
+
+  @doc """
+  The id of the always-available bundled model — the fallback the app
+  auto-activates when no model has been explicitly chosen yet, so a fresh
+  install can transcribe immediately without a forced setup step.
+  """
+  @spec bundled_model_id() :: String.t()
+  def bundled_model_id, do: Enum.find(@models, & &1.bundled).id
 
   @doc "The absolute path a bundled model's file is shipped at."
   @spec bundled_path(model()) :: String.t()

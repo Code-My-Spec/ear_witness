@@ -19,14 +19,14 @@ defmodule EarWitness.Models do
   defdelegate get_model(model_id), to: Catalog
   defdelegate default_model_id(), to: Catalog
 
-  @doc "The model currently selected for transcription, or `nil` on a fresh install."
+  @doc """
+  The model currently selected for transcription. On a fresh install with
+  nothing chosen, falls back to the bundled `base` model so the app can
+  transcribe immediately (setup is optional, not forced — story 866, PM
+  decision 2026-07-12).
+  """
   @spec get_active_model() :: Catalog.model() | nil
-  def get_active_model do
-    case active_model_id() do
-      nil -> nil
-      model_id -> Catalog.get_model(model_id)
-    end
-  end
+  def get_active_model, do: Catalog.get_model(active_model_id())
 
   @doc "Makes `model_id` the app-wide active transcription model."
   @spec set_active_model(String.t()) ::
@@ -128,8 +128,18 @@ defmodule EarWitness.Models do
         {:error, :already_downloaded}
 
       false ->
-        Downloader.start(model_id, model.download_url, model.checksum, downloaded_path(model))
+        Downloader.start(model_id, model.download_url, expected_checksum(model), downloaded_path(model))
     end
+  end
+
+  # Production verifies against the catalog's real hosted-file SHA-256.
+  # Tests replay a small stub body via ReqCassette, so config/test.exs maps
+  # the model id to the stub's hash here — keeping the catalog honest about
+  # the real file while the fixture still verifies (story 866).
+  defp expected_checksum(%{id: id, checksum: checksum}) do
+    :ear_witness
+    |> Application.get_env(:model_checksum_overrides, %{})
+    |> Map.get(id, checksum)
   end
 
   defp downloaded_path_if_verified(model_id, model) do
@@ -174,7 +184,9 @@ defmodule EarWitness.Models do
   defp downloaded_path(%{id: model_id}),
     do: Path.join(EarWitness.models_dir(), model_id <> ".bin")
 
-  defp active_model_id, do: settings().active_model_id
+  # Falls back to the bundled model when nothing has been explicitly
+  # activated, so a fresh install is never left with no usable model.
+  defp active_model_id, do: settings().active_model_id || Catalog.bundled_model_id()
 
   # Singleton row. Two concurrent first-requests can both see an empty
   # table and both insert (TOCTOU) — so tolerate duplicates: always use the

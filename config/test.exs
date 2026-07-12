@@ -64,5 +64,13 @@ config :ear_witness, EarWitness.Models.Downloader,
     }
   }
 
+# The catalog pins large-v3-turbo's REAL hosted SHA-256, but the cassette
+# above replays a small stub body. Override the expected checksum for that
+# model with the stub's hash so verification still passes in tests without
+# weakening the production checksum (see EarWitness.Models.expected_checksum/1).
+config :ear_witness, :model_checksum_overrides, %{
+  "large-v3-turbo" => "011c3bdd860284902853c2591486a51f6f193b152c1817a048d97ab624cb8121"
+}
+
 # Print only warnings and errors during test
 config :logger, level: :debug
