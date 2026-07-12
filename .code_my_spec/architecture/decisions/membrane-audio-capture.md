@@ -1,6 +1,15 @@
 # Use Membrane for audio capture and processing
 
 ## Status
+**Superseded (2026-07-12)** by [miniaudio-capture](miniaudio-capture.md)
+(microphone + Windows/Linux loopback) and
+[macos-system-audio-tap](macos-system-audio-tap.md) (macOS system output).
+Membrane blocked the Windows build — `shmex` uses POSIX shared memory with
+no Windows port — and never implemented the macOS system-audio tap it
+promised below. Retained for history; the miniaudio ADR carries the
+current decision. Original text follows.
+
+## Status (original)
 Accepted
 
 ## Context

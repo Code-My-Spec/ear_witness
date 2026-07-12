@@ -9,7 +9,9 @@ Index of every ADR in `.code_my_spec/architecture/decisions/`.
 | [local-first-privacy](decisions/local-first-privacy.md) — no audio or transcript leaves the device | Accepted |
 | [elixir-desktop](decisions/elixir-desktop.md) — application shell (wxWidgets + LiveView webview) | Accepted |
 | [whisper-cpp-transcription](decisions/whisper-cpp-transcription.md) — on-device speech-to-text | Accepted |
-| [membrane-audio-capture](decisions/membrane-audio-capture.md) — audio capture/processing pipelines | Accepted |
+| [miniaudio-capture](decisions/miniaudio-capture.md) — capture via miniaudio C NIF; mic all-OS + Windows/Linux loopback; unblocks Windows | Accepted |
+| [macos-system-audio-tap](decisions/macos-system-audio-tap.md) — macOS system output via Core Audio process taps (14.4+) | Proposed |
+| [membrane-audio-capture](decisions/membrane-audio-capture.md) — audio capture/processing pipelines | ~~Superseded~~ by miniaudio-capture |
 | [sqlite-storage](decisions/sqlite-storage.md) — local storage via ecto_sqlite3 | Accepted |
 | [background-jobs](decisions/background-jobs.md) — Oban job queue for transcription | Accepted |
 | [desktop-distribution](decisions/desktop-distribution.md) — native installers via desktop_deployment | Accepted |
