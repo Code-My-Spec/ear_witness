@@ -1,0 +1,138 @@
+name: "Linux Installer"
+
+# Builds the EarWitness Linux .run (makeself) installer and, on a version tag,
+# publishes it to the same GitHub Release as the other platforms.
+on:
+  push:
+    branches: ["master"]
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  OTP_VERSION: "29.0.3"
+  ELIXIR_VERSION: "1.20.2-otp-29"
+  # OTP's wx driver needs wxWidgets 3.2.x built with --enable-compat30; distro
+  # packages don't ship that, so we build wxWidgets (GTK) from source.
+  WX_VERSION: "v3.2.6"
+
+jobs:
+  linux:
+    name: "Build Linux installer (.run)"
+    runs-on: ubuntu-22.04
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential g++ make cmake automake autoconf libtool pkg-config \
+            git curl unzip xz-utils inotify-tools \
+            libssl-dev libncurses5-dev unixodbc-dev libgmp-dev \
+            libgtk-3-dev libwebkit2gtk-4.0-dev libnotify-dev libsecret-1-dev \
+            libpng-dev libjpeg-dev libtiff-dev zlib1g-dev \
+            mesa-common-dev libglu1-mesa-dev freeglut3-dev
+
+      - name: Install Rust toolchain (ortex NIF)
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Set up Node.js (assets)
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Cache wxWidgets (GTK, compat30)
+        id: wx-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/wxWidgets-install
+          key: wxwidgets-${{ env.WX_VERSION }}-gtk-compat30-ubuntu2204
+
+      - name: Build wxWidgets from source
+        if: steps.wx-cache.outputs.cache-hit != 'true'
+        run: |
+          set -euo pipefail
+          git clone --depth 1 --branch "$WX_VERSION" https://github.com/wxWidgets/wxWidgets.git "$HOME/wxWidgets-src"
+          cd "$HOME/wxWidgets-src"
+          git submodule update --init --depth 1
+          # Static core; compat30 + webview are what elixir-desktop needs.
+          ./configure --prefix="$HOME/wxWidgets-install" \
+            --enable-webview --enable-compat30 --disable-shared --disable-debug \
+            --with-gtk=3
+          make -j"$(nproc)"
+          make install
+
+      - name: Cache asdf toolchain (Erlang/Elixir with wx)
+        id: asdf-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.asdf
+          key: asdf-ubuntu2204-otp-${{ env.OTP_VERSION }}-elixir-${{ env.ELIXIR_VERSION }}-${{ env.WX_VERSION }}-wx
+
+      - name: Install Erlang/Elixir with wx (asdf)
+        if: steps.asdf-cache.outputs.cache-hit != 'true'
+        run: |
+          set -euo pipefail
+          git clone https://github.com/asdf-vm/asdf.git "$HOME/.asdf" --branch v0.14.1
+          . "$HOME/.asdf/asdf.sh"
+          asdf plugin add erlang
+          asdf plugin add elixir
+          # OTP finds wxWidgets via wx-config on PATH.
+          export PATH="$HOME/wxWidgets-install/bin:$PATH"
+          wx-config --version || { echo "wx-config not found on PATH"; exit 1; }
+          export KERL_CONFIGURE_OPTIONS="--disable-debug --without-javac"
+          asdf install erlang "$OTP_VERSION"
+          asdf install elixir "$ELIXIR_VERSION"
+
+      - name: Verify the wx driver actually built
+        run: |
+          set -euo pipefail
+          . "$HOME/.asdf/asdf.sh"
+          asdf global erlang "$OTP_VERSION"
+          asdf global elixir "$ELIXIR_VERSION"
+          elixir --version
+          erlroot="$(asdf where erlang "$OTP_VERSION")"
+          echo "--- wx priv ---"; ls -la "$erlroot"/lib/wx-*/priv/ 2>&1 || echo "(no wx priv dir)"
+          if ! ls "$erlroot"/lib/wx-*/priv/wxe_driver.so >/dev/null 2>&1; then
+            echo "wxe_driver.so was NOT built — OTP did not build a usable wx driver." >&2
+            exit 1
+          fi
+          echo "wx driver present."
+
+      - name: Build release + installer
+        run: |
+          set -euo pipefail
+          . "$HOME/.asdf/asdf.sh"
+          export PATH="$HOME/wxWidgets-install/bin:$PATH"
+          mix local.hex --force
+          mix local.rebar --force
+          mix deps.get
+          (cd assets && npm install)
+          mix assets.setup
+          mix assets.deploy
+          MIX_ENV=prod mix desktop.installer
+
+      - name: Locate the .run installer
+        id: artifact
+        run: |
+          set -euo pipefail
+          run_file="$(ls _build/prod/*.run | head -1)"
+          echo "path=$run_file" >> "$GITHUB_OUTPUT"
+          echo "Built: $run_file"
+
+      - name: Upload installer artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: EarWitness-linux-run
+          path: _build/prod/*.run
+
+      - name: Publish to GitHub Release (tags only)
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: _build/prod/*.run
+          fail_on_unmatched_files: true
