@@ -8,8 +8,9 @@ defmodule EarWitness.Audio.Pipeline do
   Real capture goes through `EarWitness.Audio.Miniaudio`, a miniaudio C
   NIF (see the miniaudio-capture ADR): microphone capture works on every
   platform; system-audio-tap (loopback) capture works on Windows and Linux
-  and is not available on macOS (`EarWitness.Audio.Tap` reports it
-  unavailable there — see the macos-system-audio-tap ADR).
+  (miniaudio) and on macOS 14.4+ (a native Core Audio process tap behind the
+  same NIF — see the macos-system-audio-tap ADR). `EarWitness.Audio.Tap`
+  gates it and reports it unavailable only on macOS below 14.4.
   """
 
   alias EarWitness.Audio.{Captures, Miniaudio, Tap}
@@ -166,10 +167,10 @@ defmodule EarWitness.Audio.Pipeline do
   end
 
   # System-audio-tap capture is loopback-only for now (Windows WASAPI
-  # loopback, Linux PulseAudio/PipeWire monitor source — see the
-  # miniaudio-capture ADR); it does not additionally mix in the
-  # microphone, unlike the `:fixture` seam's simulated
-  # `[:microphone, :system_audio]` double channel.
+  # loopback, Linux PulseAudio/PipeWire monitor source, macOS Core Audio
+  # process tap — see the miniaudio-capture and macos-system-audio-tap ADRs);
+  # it does not additionally mix in the microphone, unlike the `:fixture`
+  # seam's simulated `[:microphone, :system_audio]` double channel.
   defp start_real(:system_audio_tap, path) do
     case Miniaudio.start_loopback_capture(path) do
       {:ok, handle} ->

@@ -8,13 +8,13 @@ defmodule EarWitness.Audio.Miniaudio do
 
   Microphone capture works on every platform miniaudio supports (macOS
   Core Audio, Windows WASAPI, Linux ALSA/PulseAudio/PipeWire). System-audio
-  loopback capture is Windows-only (native WASAPI loopback) and
-  Linux-only (a PulseAudio/PipeWire "monitor" source opened as an ordinary
-  capture device) — `loopback_available?/0` honestly reports `false` on
-  macOS, which has no miniaudio loopback backend
-  (mackron/miniaudio#875) and needs the separate Core Audio process-tap
-  module described in the macos-system-audio-tap ADR; this module never
-  fakes availability.
+  loopback capture works on Windows (native WASAPI loopback), Linux (a
+  PulseAudio/PipeWire "monitor" source opened as an ordinary capture device),
+  and macOS 14.4+ (a native Core Audio process tap — `c_src/ear_witness/mac_tap.mm`,
+  see the macos-system-audio-tap ADR — since miniaudio itself has no macOS
+  loopback backend, mackron/miniaudio#875). `loopback_available?/0` reports
+  `true` wherever it actually works and `false` otherwise (older macOS, or the
+  NIF failing to load); this module never fakes availability.
 
   Every capture is resampled/converted by miniaudio to 16kHz mono PCM16
   regardless of the source device's native format, matching what
@@ -65,9 +65,11 @@ defmodule EarWitness.Audio.Miniaudio do
 
   @doc """
   Starts recording system-output audio (loopback) to `path`. Only
-  available where `loopback_available?/0` returns `true` (Windows, and
-  Linux with a PulseAudio/PipeWire monitor source) — returns
-  `{:error, :source_unavailable}` everywhere else, including macOS.
+  available where `loopback_available?/0` returns `true` (Windows, Linux with
+  a PulseAudio/PipeWire monitor source, and macOS 14.4+ via the Core Audio
+  process tap) — returns `{:error, :source_unavailable}` everywhere else
+  (older macOS, or no monitor source on Linux). On macOS the first call also
+  triggers the one-time TCC "AudioCapture" permission prompt.
   """
   @spec start_loopback_capture(Path.t()) :: {:ok, term()} | {:error, atom()}
   def start_loopback_capture(_path), do: :erlang.nif_error(:nif_library_not_loaded)

@@ -1,13 +1,13 @@
 defmodule EarWitness.Audio.Tap do
   @moduledoc """
-  System-audio-tap (loopback) availability. Real capture is Windows
-  (native WASAPI loopback) and Linux (PulseAudio/PipeWire monitor source)
-  only, via `EarWitness.Audio.Miniaudio.loopback_available?/0` — see the
-  miniaudio-capture ADR. macOS has no miniaudio loopback backend
-  (mackron/miniaudio#875); system-output capture there needs the separate
-  Core Audio process-tap module described in the macos-system-audio-tap
-  ADR, which is not implemented yet, so this honestly reports "not
-  available" on macOS rather than pretending a tap exists.
+  System-audio-tap (loopback) availability. Real capture works on Windows
+  (native WASAPI loopback), Linux (PulseAudio/PipeWire monitor source), and
+  macOS 14.4+ (a native Core Audio process tap — `c_src/ear_witness/mac_tap.mm`,
+  see the macos-system-audio-tap ADR — because miniaudio has no macOS loopback
+  backend, mackron/miniaudio#875). Availability is delegated to
+  `EarWitness.Audio.Miniaudio.loopback_available?/0` (see the miniaudio-capture
+  ADR), which reports `false` on macOS below 14.4 rather than pretending a tap
+  exists.
 
   `EarWitnessSpex.Fixtures.simulate_tap_not_installed/0` overrides the
   fixture seam's default (installed) to simulate the not-set-up path.

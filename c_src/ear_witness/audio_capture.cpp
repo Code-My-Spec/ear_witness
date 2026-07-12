@@ -11,12 +11,13 @@
 //     "monitor" capture device — neither has been exercised on real
 //     Windows/Linux hardware in this change; CI on those platforms must
 //     validate before this path is trusted.
-//   - macOS system-output loopback is NOT implemented here — miniaudio has
-//     no macOS loopback backend (mackron/miniaudio#875). It is a separate
-//     native Core Audio process-tap module — see
-//     .code_my_spec/architecture/decisions/macos-system-audio-tap.md.
-//     loopback_available() and start_loopback_capture/1 both honestly
-//     report unavailable on macOS rather than faking it.
+//   - macOS system-output loopback IS implemented, but not in miniaudio
+//     (which has no macOS loopback backend — mackron/miniaudio#875). It lives
+//     in the sibling Core Audio process-tap module c_src/ear_witness/mac_tap.mm
+//     (see .code_my_spec/architecture/decisions/macos-system-audio-tap.md).
+//     On macOS 14.4+ loopback_available() returns true and
+//     start_loopback_capture/1 drives that tap through the ew_mac_tap_* C
+//     interface (mac_tap.h); older macOS honestly reports unavailable.
 
 #define MA_NO_DECODING
 #define MA_NO_ENCODING
@@ -25,6 +26,15 @@
 #define MA_NO_ENGINE
 #define MINIAUDIO_IMPLEMENTATION
 #include "../miniaudio.h"
+
+#include "wav_writer.h"
+
+#ifdef __APPLE__
+// macOS system-output capture lives in mac_tap.mm (Core Audio process tap) —
+// miniaudio has no macOS loopback backend (mackron/miniaudio#875). The
+// loopback paths below call into it via this C interface.
+#include "mac_tap.h"
+#endif
 
 #include <erl_nif.h>
 
@@ -50,6 +60,11 @@ struct CaptureState {
   std::vector<ma_int16> samples;
   std::string path;
   bool device_initialized = false;
+  // Non-null when this capture is a macOS Core Audio process tap rather than a
+  // miniaudio device (see mac_tap.mm). The tap owns its own sample buffer,
+  // conversion, and WAV finalize; stop_capture/1 and the resource destructor
+  // route to it. Always null on non-Apple platforms and for mic capture.
+  void *mac_tap_handle = nullptr;
 };
 
 ErlNifResourceType *g_capture_resource_type = nullptr;
@@ -71,6 +86,16 @@ void data_callback(ma_device *device, void *output, const void *input, ma_uint32
 void capture_resource_dtor(ErlNifEnv *env, void *obj) {
   (void)env;
   auto *state = static_cast<CaptureState *>(obj);
+#ifdef __APPLE__
+  // A tap capture GC'd without an explicit stop must still tear down its Core
+  // Audio objects — a leaked private aggregate lingers in coreaudiod. Discard
+  // (no WAV) here, mirroring how the miniaudio branch below uninits without
+  // finalizing a file.
+  if (state->mac_tap_handle != nullptr) {
+    ew_mac_tap_free(state->mac_tap_handle);
+    state->mac_tap_handle = nullptr;
+  }
+#endif
   if (state->device_initialized) {
     ma_device_uninit(&state->device);
   }
@@ -104,48 +129,9 @@ bool get_path(ErlNifEnv *env, ERL_NIF_TERM term, std::string *out) {
   return true;
 }
 
-// Writes accumulated PCM16 mono samples as a RIFF/WAVE file — the exact
-// layout EarWitness.Recordings.WavHeader.parse/1 expects.
-bool write_wav(const std::string &path, const std::vector<ma_int16> &samples) {
-  FILE *file = std::fopen(path.c_str(), "wb");
-  if (file == nullptr) {
-    return false;
-  }
-
-  const ma_uint32 channels = kChannels;
-  const ma_uint32 bits_per_sample = 16;
-  const ma_uint32 block_align = channels * (bits_per_sample / 8);
-  const ma_uint32 byte_rate = kSampleRate * block_align;
-  const ma_uint32 data_size = static_cast<ma_uint32>(samples.size() * sizeof(ma_int16));
-  const ma_uint32 riff_size = 36 + data_size;
-  const ma_uint16 pcm_format = 1;
-
-  bool ok = true;
-  ok = ok && std::fwrite("RIFF", 1, 4, file) == 4;
-  ok = ok && std::fwrite(&riff_size, sizeof(riff_size), 1, file) == 1;
-  ok = ok && std::fwrite("WAVE", 1, 4, file) == 4;
-  ok = ok && std::fwrite("fmt ", 1, 4, file) == 4;
-  const ma_uint32 fmt_chunk_size = 16;
-  ok = ok && std::fwrite(&fmt_chunk_size, sizeof(fmt_chunk_size), 1, file) == 1;
-  ok = ok && std::fwrite(&pcm_format, sizeof(pcm_format), 1, file) == 1;
-  const ma_uint16 channels16 = static_cast<ma_uint16>(channels);
-  ok = ok && std::fwrite(&channels16, sizeof(channels16), 1, file) == 1;
-  ok = ok && std::fwrite(&kSampleRate, sizeof(kSampleRate), 1, file) == 1;
-  ok = ok && std::fwrite(&byte_rate, sizeof(byte_rate), 1, file) == 1;
-  const ma_uint16 block_align16 = static_cast<ma_uint16>(block_align);
-  ok = ok && std::fwrite(&block_align16, sizeof(block_align16), 1, file) == 1;
-  const ma_uint16 bits_per_sample16 = static_cast<ma_uint16>(bits_per_sample);
-  ok = ok && std::fwrite(&bits_per_sample16, sizeof(bits_per_sample16), 1, file) == 1;
-  ok = ok && std::fwrite("data", 1, 4, file) == 4;
-  ok = ok && std::fwrite(&data_size, sizeof(data_size), 1, file) == 1;
-
-  if (ok && data_size > 0) {
-    ok = std::fwrite(samples.data(), 1, data_size, file) == data_size;
-  }
-
-  std::fclose(file);
-  return ok;
-}
+// PCM16 mono WAV finalize is shared with the macOS tap path — see
+// wav_writer.h (ear_witness::write_wav_s16). kSampleRate/kChannels above and
+// the writer's kWavSampleRate/kWavChannels are the same 16kHz mono contract.
 
 // Enumerates devices via a fresh, short-lived context each call — simpler
 // and safer than keeping one alive for the NIF's lifetime, and cheap
@@ -373,11 +359,32 @@ static ERL_NIF_TERM nif_start_loopback_capture(ErlNifEnv *env, int argc, const E
     return make_error(env, "source_unavailable");
   }
   return start_device(env, ma_device_type_capture, &monitor_id, path);
+#elif defined(__APPLE__)
+  // macOS: miniaudio has no loopback backend (mackron/miniaudio#875), so drive
+  // the native Core Audio process tap (mac_tap.mm). It accumulates converted
+  // 16kHz-mono-s16 samples and finalizes the WAV on stop, exactly like the mic
+  // path — so we only need to hold its opaque handle in a CaptureState the
+  // Elixir side can hand back to stop_capture/1. A null handle means the tap
+  // couldn't start (below the 14.4 floor, or the TCC AudioCapture permission
+  // was denied).
+  {
+    void *tap = ew_mac_tap_start(path.c_str());
+    if (tap == nullptr) {
+      return make_error(env, "source_unavailable");
+    }
+
+    void *resource_mem = enif_alloc_resource(g_capture_resource_type, sizeof(CaptureState));
+    auto *state = new (resource_mem) CaptureState();
+    state->path = path;
+    state->mac_tap_handle = tap;
+
+    ERL_NIF_TERM resource_term = enif_make_resource(env, resource_mem);
+    enif_release_resource(resource_mem);
+    return make_ok(env, resource_term);
+  }
 #else
-  // macOS (and any other platform): miniaudio has no loopback backend here
-  // (mackron/miniaudio#875) — system-output capture needs the separate
-  // Core Audio process-tap module described in the
-  // macos-system-audio-tap ADR. Report honestly rather than faking it.
+  // Any other platform: no system-output capture backend. Report honestly
+  // rather than faking it.
   (void)path;
   return make_error(env, "source_unavailable");
 #endif
@@ -391,6 +398,21 @@ static ERL_NIF_TERM nif_stop_capture(ErlNifEnv *env, int argc, const ERL_NIF_TER
     return enif_make_badarg(env);
   }
 
+#ifdef __APPLE__
+  // macOS tap capture: hand off to the native tap, which stops the device,
+  // converts + writes the shared 16kHz mono WAV, and tears down its Core Audio
+  // objects. Same Elixir surface as the mic path — stop_capture/1 works for
+  // both.
+  if (state->mac_tap_handle != nullptr) {
+    int rc = ew_mac_tap_stop(state->mac_tap_handle);
+    state->mac_tap_handle = nullptr;
+    if (rc != 0) {
+      return make_error(env, "write_failed");
+    }
+    return enif_make_atom(env, "ok");
+  }
+#endif
+
   if (!state->device_initialized) {
     return make_error(env, "already_stopped");
   }
@@ -401,7 +423,7 @@ static ERL_NIF_TERM nif_stop_capture(ErlNifEnv *env, int argc, const ERL_NIF_TER
   ma_device_uninit(&state->device);
   state->device_initialized = false;
 
-  bool wrote = write_wav(state->path, state->samples);
+  bool wrote = ear_witness::write_wav_s16(state->path, state->samples);
   if (!wrote) {
     return make_error(env, "write_failed");
   }
@@ -421,6 +443,10 @@ static ERL_NIF_TERM nif_loopback_available(ErlNifEnv *env, int argc, const ERL_N
   ma_device_id unused_id;
   bool available = find_linux_monitor_device(&unused_id);
   return enif_make_atom(env, available ? "true" : "false");
+#elif defined(__APPLE__)
+  // Core Audio process taps are available on macOS 14.4+ (runtime-checked in
+  // mac_tap.mm via @available) — true there, false on older macOS.
+  return enif_make_atom(env, ew_mac_tap_available() ? "true" : "false");
 #else
   return enif_make_atom(env, "false");
 #endif
