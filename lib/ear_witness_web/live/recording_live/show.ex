@@ -77,13 +77,13 @@ defmodule EarWitnessWeb.RecordingLive.Show do
         <div class="card-body">
           <h2 class="card-title">Transcript</h2>
           <button
-            :if={is_nil(@transcript)}
+            :if={is_nil(@transcript) || @transcript.status == :failed}
             type="button"
             data-test="transcribe-button"
             phx-click="transcribe"
             class="btn btn-primary"
           >
-            Transcribe
+            {if @transcript, do: "Retry transcription", else: "Transcribe"}
           </button>
           <div :if={@transcript && @transcript.status != :completed} data-test="job-status">
             {@transcript.status}

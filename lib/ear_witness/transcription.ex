@@ -20,6 +20,14 @@ defmodule EarWitness.Transcription do
   @spec transcribe(Recording.t()) :: {:ok, Transcript.t()} | {:error, Ecto.Changeset.t()}
   def transcribe(%Recording{id: id}) do
     case get_transcript_for_recording(id) do
+      {:ok, %Transcript{status: :failed} = transcript} ->
+        # Explicit user retry after a failure (e.g. an engine crash) —
+        # re-enqueue rather than returning the dead transcript.
+        with {:ok, _} <- transcript |> Transcript.changeset(%{status: :queued}) |> Repo.update(),
+             {:ok, _job} <- %{recording_id: id} |> Worker.new() |> Oban.insert() do
+          get_transcript_for_recording(id)
+        end
+
       {:ok, transcript} ->
         {:ok, transcript}
 

@@ -25,7 +25,7 @@ defmodule EarWitness.Transcription.Worker do
     engine =
       Application.get_env(:ear_witness, :transcription_engine, EarWitness.Transcription.Engine)
 
-    case engine.transcribe(recording.file_path) do
+    case safe_transcribe(engine, recording.file_path) do
       {:ok, documents} ->
         insert_segments(transcript, documents)
         transcript |> update_status(:completed) |> broadcast(recording_id)
@@ -36,6 +36,19 @@ defmodule EarWitness.Transcription.Worker do
         transcript |> update_status(:failed) |> broadcast(recording_id)
         {:error, reason}
     end
+  end
+
+  # The whisper NIF stub exits with :nif_library_not_loaded when the NIF is
+  # gone (e.g. dev code reloading unloaded it — NIFs cannot be reloaded).
+  # A bare exit bypassed the {:error, _} branch entirely, so the transcript
+  # sat at :transcribing forever with no user-facing failure (story-860 QA
+  # finding, issue 3d0c6279). Convert crashes into the normal failed path.
+  defp safe_transcribe(engine, file_path) do
+    engine.transcribe(file_path)
+  rescue
+    error -> {:error, Exception.message(error)}
+  catch
+    :exit, reason -> {:error, "transcription engine crashed: #{inspect(reason)}"}
   end
 
   # Attributes every segment to a detected speaker (idempotent — see
