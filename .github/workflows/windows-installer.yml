@@ -9,15 +9,16 @@ name: "Windows Installer"
 # - The whisper transcription NIF is skipped on Windows (no-op Makefile.win);
 #   transcription is unavailable until the model work lands, same as elsewhere.
 on:
-  # Parked (manual-only): Membrane/shmex (POSIX-only shared memory) has been
-  # replaced by a miniaudio C NIF (see the miniaudio-capture ADR), which
-  # does support Windows (WASAPI, including native loopback capture) —
-  # that Windows-support blocker is gone. Still manual-dispatch-only
-  # because the miniaudio Windows path has not yet been exercised on real
-  # Windows hardware/CI; trigger this workflow manually and confirm a
-  # green build (including a real capture smoke test) before re-enabling
-  # push/tags. The toolchain here (setup-beam OTP+wx, NSIS) is otherwise
-  # ready.
+  # Auto-publish re-enabled: the miniaudio capture NIF (which replaced
+  # Membrane/shmex — see the miniaudio-capture ADR) has now been exercised on
+  # real Windows. A CI build produced a working installer, and a capture smoke
+  # test on Windows confirmed EarWitness.Audio.Miniaudio.list_devices/0
+  # enumerates WASAPI devices with loopback_available? = true. wx ships with the
+  # OTP install. (Not yet validated: the wx GUI window on a real desktop
+  # session, and whisper transcription — skipped on Windows, no-op Makefile.win.)
+  push:
+    branches: ["master"]
+    tags: ["v*"]
   workflow_dispatch:
 
 permissions:
