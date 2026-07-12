@@ -14,8 +14,13 @@ defmodule EarWitnessWeb.Sup do
       {Phoenix.PubSub, name: EarWitness.PubSub},
       {Registry, keys: :unique, name: EarWitness.CodeMySpec.WidgetRegistry},
       {DynamicSupervisor, strategy: :one_for_one, name: EarWitness.CodeMySpec.WidgetSupervisor},
+      {Registry, keys: :unique, name: EarWitness.Bots.Runner.Registry},
+      {DynamicSupervisor, strategy: :one_for_one, name: EarWitness.Bots.Runner.Supervisor},
+      EarWitness.Audio.Captures,
       EarWitnessWeb.Endpoint,
       EarWitness.Transcription.Server,
+      {Task.Supervisor, name: EarWitness.Models.TaskSupervisor},
+      EarWitness.Models.Downloader,
       {Oban, Application.fetch_env!(:ear_witness, Oban)}
     ]
 

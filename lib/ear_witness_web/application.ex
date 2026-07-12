@@ -20,8 +20,11 @@ defmodule EarWitnessWeb.Application do
     File.mkdir_p!(EarWitness.app_dir())
     File.mkdir_p!(EarWitness.recordings_dir())
     File.mkdir_p!(EarWitness.transcription_id())
+    File.mkdir_p!(EarWitness.models_dir())
 
-    {:ok, sup} = Supervisor.start_link([EarWitness.Repo], name: __MODULE__, strategy: :one_for_one)
+    {:ok, sup} =
+      Supervisor.start_link([EarWitness.Repo], name: __MODULE__, strategy: :one_for_one)
+
     EarWitness.Repo.initialize()
     # Bring the schema up before anything that queries it (the LiveView pages,
     # Oban) starts — releases have no separate `mix ecto.migrate` step.

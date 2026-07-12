@@ -8,6 +8,10 @@ defmodule EarWitness.MixProject do
       version: @version,
       elixir: "~> 1.14",
       elixirc_paths: elixirc_paths(Mix.env()),
+      # BDD specs (*_spex.exs) are first-class tests — the project's sole
+      # verification layer (no unit tests, per PM decision 2026-07-11)
+      test_pattern: "*_{test,spex}.exs",
+      test_load_filters: [~r/_(test|spex)\.exs$/],
       compilers: compilers(Mix.env()),
       listeners: [Phoenix.CodeReloader],
       start_permanent: Mix.env() == :prod,
@@ -105,9 +109,17 @@ defmodule EarWitness.MixProject do
       {:phoenix_html, "~> 4.3"},
       {:phoenix_view, "~> 2.0"},
       {:phoenix_live_reload, "~> 1.4", only: [:dev]},
+      # Phoenix.LiveViewTest's DOM assertions (has_element?, render, form/2,
+      # etc. — used throughout test/spex/**/*_spex.exs) require this.
+      {:lazy_html, ">= 0.1.0", only: :test},
       {:gettext, "~> 1.0"},
       {:plug_cowboy, "~> 2.6"},
       {:jason, "~> 1.4"},
+
+      # Hand-written Req clients for external APIs (see the req_cassette
+      # ADR) — EarWitness.Models.Downloader fetches model files this way.
+      {:req, "~> 0.5"},
+      {:req_cassette, "~> 0.6.0", only: :test},
 
       # Assets
       {:esbuild, "~> 0.8", runtime: Mix.env() == :dev},
@@ -128,6 +140,10 @@ defmodule EarWitness.MixProject do
       # Livebook
       {:kino_vega_lite, "~> 0.1.10", only: [:dev]},
 
+      # MCP (see the anubis-mcp ADR) — EarWitnessWeb.McpServer's tool
+      # surface, stdio transport only.
+      {:anubis_mcp, "~> 1.6"},
+
       # Libraries
       {:membrane_core, "~> 1.0"},
       {:membrane_portaudio_plugin, "~> 0.19.6"},
@@ -137,7 +153,9 @@ defmodule EarWitness.MixProject do
       {:membrane_file_plugin, "~> 0.17"},
       {:ortex, "~> 0.1.10"},
       {:nx, "~> 0.7"},
-      {:elixir_make, "~> 0.10"},
+      # lazy_html (Phoenix.LiveViewTest's DOM dep, added for BDD spex) still
+      # pins elixir_make ~> 0.9; widen to accept either until it catches up.
+      {:elixir_make, "~> 0.9 or ~> 0.10"},
       {:oban, "~> 2.17"}
     ]
 

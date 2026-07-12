@@ -16,6 +16,20 @@ defmodule EarWitnessWeb.Router do
 
   scope "/", EarWitnessWeb do
     pipe_through :browser
-    live "/", TodoLive
+
+    # "/" now opens the recordings library — RecordingLive supersedes
+    # TodoLive as the app's primary surface (see the architecture
+    # proposal). TodoLive stays reachable at /legacy-todo during the
+    # transition rather than being deleted outright.
+    live "/", RecordingLive.Index, :index
+    live "/recordings", RecordingLive.Index, :index
+    live "/recordings/trash", RecordingLive.Index, :trash
+    live "/recordings/:id", RecordingLive.Show, :show
+    live "/recordings/:id/transcript", TranscriptLive.Editor, :show
+    live "/search", SearchLive
+    live "/settings", SettingsLive
+    live "/setup", SetupLive
+    live "/bots", BotLive
+    live "/legacy-todo", TodoLive
   end
 end

@@ -1,0 +1,25 @@
+{
+  "version": "1.0",
+  "interactions": [
+    {
+      "request": {
+        "method": "GET",
+        "uri": "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo.bin",
+        "query_string": "",
+        "headers": {},
+        "body_type": "text",
+        "body": ""
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": ["application/octet-stream"],
+          "content-length": ["512"]
+        },
+        "body_type": "blob",
+        "body_blob": "+3ly4aquM6/tII/AInslkSN8Dg0fQtJWBLHojWhxiqpgY6eS6ldUt2pyoKKYVHOxpDW3Ls/MVJOSZOKNw+ckILbZw6uyGDQLVwsyorq64jzUF72+Xs0ln2x5CQa9r0WSovJMIZUOsnesZVSZV0B/rrMbf4YDe/A8pqT6WV/uI2BfbHlfrPm19E9ywJ3yoQGac1I3ltZohVjeLzhk9lGRm6EsWt/zK+/UTxcmeRZtOmxkKv2VH647evDXgplBi+GM3BFH8xTIiztfEPVY/TjT1XBeh7nre/LxOQmThVVfA2seLxzIz0ztffQQ5evOyaAfdNQ/grlBnCmCHQ5wRSw/02xsfv2esJd/Q7ajNOgNhc6Fr9GQ1tOWm6JtkrZpdKZExqNzgV7s2950JeIURlGXS4Gc3n6+mlEXBfi8nLe1Dz6vKi7Ei6+FZrNSLBw7D2dint9olW/W/L/63yQyoo/ahixuadJ8yTYOVVrZZuHG1hvvC+vvt628qnX+6h7MftDa8rOvq75cGx9VcSoGxHd4FWHxUQlPYTuZ1Cj3Xm2yJyHp8PQrDJX1OLdPd+cMBLMSe/8KPCRtFstgwd8CAq4/VFAZonG5WQY2k3ld3/vYRGpeQw3fhzZrXvYhqufa/N5OzUDX9vHvoTNzg7/S+r8Aw94OvS/WGFKISsRO4PnQyFY="
+      },
+      "recorded_at": "2026-07-11T00:00:00Z"
+    }
+  ]
+}

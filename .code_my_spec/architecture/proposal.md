@@ -165,4 +165,5 @@ for AI assistants). Everything runs on-device (local-first-privacy ADR).
 - EarWitness.Speakers -> EarWitness.Models
 - EarWitness.Search -> EarWitness.Transcription
 - EarWitness.Search -> EarWitness.Speakers
+- EarWitness.Search -> EarWitness.Recordings
 - EarWitness.Bots -> EarWitness.Recordings

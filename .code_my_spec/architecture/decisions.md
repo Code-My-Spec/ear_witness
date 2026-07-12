@@ -17,6 +17,7 @@ Index of every ADR in `.code_my_spec/architecture/decisions/`.
 | [anubis-mcp](decisions/anubis-mcp.md) — local MCP server via Anubis on the app endpoint | Accepted |
 | [support-widget](decisions/support-widget.md) — CodeMySpec chat/feedback over deploy-key Slipstream | Accepted |
 | [asset-pipeline](decisions/asset-pipeline.md) — esbuild + Tailwind v4 + vendored DaisyUI 5 (dart_sass removed) | Accepted |
+| [meeting-bot-relay](decisions/meeting-bot-relay.md) — config-selected seam for joining a real meeting; no vendor chosen yet | Proposed |
 
 ## Standard-stack decisions (pre-made)
 

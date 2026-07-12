@@ -150,30 +150,30 @@ defmodule EarWitness.Audio.Windows do
     actual_sample_duration_ms = bytes_to_ms(window_size, sample_rate) / n
 
     windows
-      |> Enum.reverse()
-      |> inspect_windows()
-      |> Enum.with_index()
-      |> Enum.map(fn {%{scd: scd} = window, index} ->
-        window_start_time_ms = bytes_to_ms(window.start_index, sample_rate)
-        window_end_time_ms = bytes_to_ms(window.end_index, sample_rate)
-        relative_step_start_time_ms = bytes_to_ms(index * step_size, sample_rate)
-        relative_step_end_time_ms = bytes_to_ms((index + 1) * step_size, sample_rate)
-        absolute_step_start_time_ms = window_start_time_ms + relative_step_start_time_ms
-        absolute_step_end_time_ms = window_start_time_ms + relative_step_end_time_ms
-        start_sample_index = trunc(relative_step_start_time_ms / actual_sample_duration_ms)
-        end_sample_index = ceil(relative_step_end_time_ms / actual_sample_duration_ms)
+    |> Enum.reverse()
+    |> inspect_windows()
+    |> Enum.with_index()
+    |> Enum.map(fn {%{scd: scd} = window, index} ->
+      window_start_time_ms = bytes_to_ms(window.start_index, sample_rate)
+      window_end_time_ms = bytes_to_ms(window.end_index, sample_rate)
+      relative_step_start_time_ms = bytes_to_ms(index * step_size, sample_rate)
+      relative_step_end_time_ms = bytes_to_ms((index + 1) * step_size, sample_rate)
+      absolute_step_start_time_ms = window_start_time_ms + relative_step_start_time_ms
+      absolute_step_end_time_ms = window_start_time_ms + relative_step_end_time_ms
+      start_sample_index = trunc(relative_step_start_time_ms / actual_sample_duration_ms)
+      end_sample_index = ceil(relative_step_end_time_ms / actual_sample_duration_ms)
 
-        "#{index}th step of window. Window from #{window_start_time_ms} to #{window_end_time_ms}. Step from #{absolute_step_start_time_ms} to #{absolute_step_end_time_ms}. Start sample is #{start_sample_index}. End sample is #{end_sample_index}"
-        |> IO.puts()
+      "#{index}th step of window. Window from #{window_start_time_ms} to #{window_end_time_ms}. Step from #{absolute_step_start_time_ms} to #{absolute_step_end_time_ms}. Start sample is #{start_sample_index}. End sample is #{end_sample_index}"
+      |> IO.puts()
 
-        %{
-          start_sample_index: start_sample_index,
-          end_sample_index: end_sample_index,
-          start_time: absolute_step_start_time_ms,
-          actual_sample_duration: actual_sample_duration_ms,
-          scd: Nx.slice(scd, [start_sample_index], [end_sample_index - start_sample_index])
-        }
-      end)
+      %{
+        start_sample_index: start_sample_index,
+        end_sample_index: end_sample_index,
+        start_time: absolute_step_start_time_ms,
+        actual_sample_duration: actual_sample_duration_ms,
+        scd: Nx.slice(scd, [start_sample_index], [end_sample_index - start_sample_index])
+      }
+    end)
   end
 
   def inspect_windows(windows) do

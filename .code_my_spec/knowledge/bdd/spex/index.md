@@ -77,11 +77,68 @@ phone home during inference.
 (prose changes; contracts shouldn't). The UI implements these:
 
 - `[data-test="recording-row"]` — one per library recording (contains title)
-- `[data-test="recording-duration"]`, `[data-test="recording-source"]`
-- `[data-test="import-error"]`, `[data-test="capture-error"]`
+- `[data-test="recording-duration"]`, `[data-test="recording-source"]`,
+  `[data-test="capture-channels"]`, `[data-test="capture-status"]`
+- `[data-test="import-error"]`, `[data-test="capture-error"]`,
+  `[data-test="tap-setup-guide"]`
 - `[data-test="transcribe-button"]`, `[data-test="job-status"]`
-- `[data-test="transcript"]`, `[data-test="transcript-segment"]`,
-  `[data-test="segment-timestamp"]`, `[data-test="segment-speaker"]`
+- Settings: `[data-test="capture-source-form"]`,
+  `[data-test="active-capture-source"]`, `[data-test="consent-policy-form"]`
+- Transcript: `[data-test="transcript"]`, `[data-test="transcript-segment"]`
+  (addressed by `data-segment-id`), `[data-test="segment-timestamp"]`,
+  `[data-test="segment-speaker"]`
+- Speakers (story 862): `[data-test="speaker-chip"]` (addressed by
+  `data-speaker-id`), `[data-test="speaker-name-form"]`,
+  `[data-test="delete-voice-signature"]`
+- Editor (story 863): `[data-test="segment-editor"]`,
+  `[data-test="segment-speaker-form"]` (both per-segment via
+  `data-segment-id`), `[data-test="undo-button"]`,
+  `[data-test="revert-button"]`, `[data-test="playing-segment"]` (nested
+  marker inside the currently playing segment's container)
+- Search (story 864): `[data-test="search-form"]` (field `q`),
+  `[data-test="search-result"]` with `result-snippet` /
+  `result-recording-title` / `result-timestamp` / `result-speaker`,
+  `[data-test="recording-result"]` (title/collection hits),
+  `[data-test="search-filters"]` (fields `speaker`/`from`/`to`),
+  `[data-test="focused-segment"]` (editor landing from a search hit)
+- Collections/trash (story 865): `[data-test="collection-form"]`,
+  `[data-test="collection"]` + `[data-test="collection-option"]` (addressed
+  by `data-collection-id`), `[data-test="recording-collections-form"]`
+  (field `recording[collection_ids][]`),
+  `[data-test="recording-collection"]`,
+  `[data-test="uncategorized-recordings"]`,
+  `[data-test="recording-metadata-form"]` with `recording-title` /
+  `recording-date` / `recording-participants`,
+  `[data-test="delete-collection-button"]`,
+  `[data-test="delete-recording-button"]`, `[data-test="trash-row"]`,
+  `[data-test="trash-retention-notice"]`, `[data-test="restore-button"]`;
+  `recording-row` also carries `data-recording-id`. Trash route assumed
+  `/recordings/trash`.
+- Consent (story 867): `[data-test="policy-option"]` /
+  `[data-test="policy-explanation"]` (addressed by `data-policy`),
+  `[data-test="legal-disclaimer"]`, `[data-test="active-consent-policy"]`,
+  `[data-test="announce-notice-status"]`, `[data-test="capture-notice"]`
+  (notify policy's visible affordance)
+- Model setup (story 866): `[data-test="model-option"]` (by `data-model-id`),
+  `[data-test="selected-model"]`, `[data-test="download-button"]`,
+  `[data-test="download-progress"]`, `[data-test="download-status"]`,
+  `[data-test="retry-download-button"]`, `[data-test="active-model-form"]`
+- Bots (story 869, route `/bots`): `[data-test="bot-dispatch-form"]`
+  (field `bot[meeting_url]`), `[data-test="bot-session"]` /
+  `[data-test="bot-status"]` (values dispatched|recording|completed|
+  recalled|failed) / `[data-test="bot-display-name"]` /
+  `[data-test="recall-button"]` / `[data-test="bot-failure-reason"]` (all
+  addressed by `data-session-id`); `recording-source` gains value `"bot"`.
+  In-app observables only — bot visibility in the real meeting and relay
+  data-retention belong to manual QA / vendor contract tests.
+- MCP (story 868): `[data-test="assistant-access-form"]` (field `access`,
+  SettingsLive). The 868 specs also ENCODE a proposed McpServer tool API —
+  `list_tools/0`, `search_transcripts/1`, `read_transcript/1`,
+  `attach_summary/1`, each returning ok/`{:error, :access_revoked}` tuples,
+  with stdio-only transport config (no `:port` key). This API was designed
+  by the spec author, not taken from a formal component spec — the
+  McpServer component spec MUST either adopt these shapes or revise them
+  AND the 868 specs together.
 
 ## Legal observable surfaces in `then_`
 

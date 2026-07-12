@@ -24,11 +24,213 @@ defmodule EarWitnessSpex.Fixtures do
 
   @doc """
   Makes the capture layer report zero available input devices for the
-  current test (spec 7325 — "No input device available"). Implemented when
-  the EarWitness.Audio device seam lands; raising keeps the spec honestly
-  red until then.
+  current test (spec 7325 — "No input device available"). Overrides
+  `EarWitness.Audio.Pipeline.input_devices/0` for the duration of the
+  current test only.
   """
   def simulate_no_input_devices do
-    raise "EarWitness.Audio device seam not implemented yet (story 860, criterion 7325)"
+    Application.put_env(:ear_witness, :capture_devices_override, [])
+
+    ExUnit.Callbacks.on_exit(fn ->
+      Application.delete_env(:ear_witness, :capture_devices_override)
+    end)
+  end
+
+  @doc """
+  Makes the capture layer report that the system audio tap is not set up on
+  this machine (spec 7338 — guided setup). Overrides
+  `EarWitness.Audio.Tap.installed?/0` for the duration of the current test
+  only.
+  """
+  def simulate_tap_not_installed do
+    Application.put_env(:ear_witness, :tap_installed_override, false)
+
+    ExUnit.Callbacks.on_exit(fn ->
+      Application.delete_env(:ear_witness, :tap_installed_override)
+    end)
+  end
+
+  @doc """
+  Makes announce-policy notice delivery fail for the current test (story
+  861 spec 7337 — capture refused when the policy's conditions are unmet;
+  story 867 spec 7373 — capture refused when the policy cannot be
+  satisfied, the same underlying behavior viewed from the recording-law
+  story). Overrides `EarWitness.Audio.ConsentPolicy.authorize/1` for the
+  duration of the current test only.
+  """
+  def simulate_announcement_delivery_failure do
+    Application.put_env(:ear_witness, :announcement_delivery_override, :fail)
+
+    ExUnit.Callbacks.on_exit(fn ->
+      Application.delete_env(:ear_witness, :announcement_delivery_override)
+    end)
+  end
+
+  @doc """
+  Establishes `name` as an already-known speaker with a stored voice
+  signature (an embedding centroid accumulated from a prior recording) —
+  the precondition for specs asserting that the *next* recording either
+  recognizes that voice automatically (story 862, criterion 7341) or, after
+  the signature is deleted, no longer recognizes it (criterion 7344).
+
+  Staging this honestly means driving a full round trip through the real
+  `Speakers.Diarizer` + `Speakers.Identifier` seams (transcribe a first
+  recording, name the resulting speaker, then cluster/match a second
+  recording's voice embedding against the stored centroid) — none of which
+  exist yet. Raising keeps both specs honestly red until that seam lands,
+  rather than faking a "known speaker" into existence.
+  """
+  def simulate_known_speaker_with_voice_signature(_name) do
+    raise "EarWitness.Speakers.Diarizer/Identifier voice-signature seam not implemented yet " <>
+            "(story 862, criteria 7341, 7344)"
+  end
+
+  @doc """
+  Makes a transcribed recording's segments carry two distinct detected
+  speakers (spec 7346 — "Move a segment to the right speaker"). Speaker
+  diarization (`EarWitness.Speakers.Diarizer`, story 862) is what would
+  honestly produce more than one detected speaker on a transcript; until
+  that seam lands there is no way through the real UI to stage this
+  precondition, so this raises rather than faking the attribution.
+  """
+  def simulate_two_speakers_detected do
+    raise "EarWitness.Speakers.Diarizer seam not implemented yet (story 862); " <>
+            "needed to stage two distinct detected speakers for story 863, criterion 7346"
+  end
+
+  @doc """
+  Interrupts an in-progress model download partway through, the way a
+  real network drop would (spec 7369 — "Network drop mid-download
+  recovers cleanly"). Injecting a genuine dropped connection isn't
+  stageable through the real UI, so this flips a one-shot override that
+  `EarWitness.Models.Downloader` consumes on its very next transfer
+  attempt, failing it with `:network_interrupted` before it ever reaches
+  the network — the retry that follows goes through the real download
+  seam (replayed via `ReqCassette`, see `config/test.exs`) and verifies
+  normally.
+  """
+  def simulate_download_network_interruption do
+    Application.put_env(:ear_witness, :models_downloader_network_override, :interrupt)
+
+    ExUnit.Callbacks.on_exit(fn ->
+      Application.delete_env(:ear_witness, :models_downloader_network_override)
+    end)
+  end
+
+  @doc """
+  Advances the bot session identified by `session_id` through a full,
+  successful run — joins the meeting, records it, leaves, and hands the
+  audio off to the local library, exactly as a real completed bot
+  session would (story 869, criteria 7385 "The meeting shows up in the
+  library afterwards", 7386 "Bot recordings get transcripts and
+  speakers automatically", and 7389 "External components never keep
+  the conversation"). Actually joining a real meeting is not something
+  any spec can drive — there is no real external meeting to join — so
+  this drives the same `EarWitness.Bots` calls the real
+  `EarWitness.Bots.Runner` would make once it had one: mark the session
+  recording, deposit fixture audio as a `"bot"`-sourced recording, run
+  it through the normal transcription pipeline, then complete the
+  session.
+  """
+  def simulate_bot_join_completed(session_id) do
+    {:ok, _session} = EarWitness.Bots.mark_recording(session_id)
+
+    wav = bot_recording_wav()
+    {:ok, header} = EarWitness.Recordings.WavHeader.parse(wav)
+    path = Path.join(EarWitness.recordings_dir(), Ecto.UUID.generate() <> ".wav")
+    File.mkdir_p!(Path.dirname(path))
+    File.write!(path, wav)
+
+    {:ok, recording} =
+      EarWitness.Recordings.create_recording(%{
+        title: "Bot meeting recording",
+        source: :bot,
+        file_path: path,
+        duration: header.duration_seconds
+      })
+
+    {:ok, _transcript} = EarWitness.Transcription.transcribe(recording)
+    {:ok, _session} = EarWitness.Bots.complete_bot_session(session_id, recording.id)
+
+    :ok
+  end
+
+  @doc """
+  Advances the bot session identified by `session_id` to "joined and
+  actively recording, meeting still underway" — the precondition for
+  testing that a user can pull the bot back out before it would finish
+  on its own (story 869, criterion 7387 — "Recall the bot
+  mid-meeting"). Drives the same `EarWitness.Bots.mark_recording/1` call
+  the real `EarWitness.Bots.Runner` makes on a successful join.
+  """
+  def simulate_bot_actively_recording(session_id) do
+    {:ok, _session} = EarWitness.Bots.mark_recording(session_id)
+    :ok
+  end
+
+  @doc """
+  Advances the bot session identified by `session_id` to a failed join
+  outcome because the meeting's waiting room rejected it, the way a
+  host declining to admit the bot would (story 869, criterion 7388 —
+  "Waiting-room rejection is reported, not swallowed"). Drives the same
+  `EarWitness.Bots.fail_bot_session/2` call the real
+  `EarWitness.Bots.Runner` makes on a rejected join.
+  """
+  def simulate_bot_waiting_room_rejection(session_id) do
+    {:ok, _session} =
+      EarWitness.Bots.fail_bot_session(
+        session_id,
+        "The meeting's waiting room did not admit the bot."
+      )
+
+    :ok
+  end
+
+  @doc """
+  Holds model-download transfers genuinely in flight (story 866,
+  criterion 7368) until `release_model_downloads/0` — like a real
+  multi-gigabyte model on a slow connection. Registers an `on_exit`
+  release so a spec can never leak a held gate.
+  """
+  def hold_model_downloads do
+    ExUnit.Callbacks.on_exit(fn -> __MODULE__.GatedDownloadPlug.release() end)
+    __MODULE__.GatedDownloadPlug.hold()
+  end
+
+  @doc "Releases transfers held by `hold_model_downloads/0`."
+  def release_model_downloads do
+    __MODULE__.GatedDownloadPlug.release()
+  end
+
+  # A minimal, valid mono 16-bit PCM WAV file as an in-memory binary — same
+  # construction as EarWitnessSpex.WavFixture.short/0, duplicated rather than
+  # reused because this boundary may not dep on EarWitnessSpex (see moduledoc).
+  defp bot_recording_wav do
+    sample_rate = 16_000
+    num_samples = 1_600
+    channels = 1
+    bits_per_sample = 16
+    block_align = channels * div(bits_per_sample, 8)
+    byte_rate = sample_rate * block_align
+
+    data = :binary.copy(<<0::little-16>>, num_samples)
+    data_size = byte_size(data)
+    riff_size = 36 + data_size
+
+    <<
+      "RIFF",
+      riff_size::little-32,
+      "WAVE",
+      "fmt ",
+      16::little-32,
+      1::little-16,
+      channels::little-16,
+      sample_rate::little-32,
+      byte_rate::little-32,
+      block_align::little-16,
+      bits_per_sample::little-16,
+      "data",
+      data_size::little-32
+    >> <> data
   end
 end

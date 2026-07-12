@@ -41,6 +41,16 @@ defmodule EarWitnessWeb.Endpoint do
   plug Plug.Head
 
   plug Plug.Session, @session_options
-  plug Desktop.Auth
+
+  # Desktop.Auth gates every request behind a per-BEAM-run random key
+  # (`Desktop.Auth.login_key/0`), only ever known to the launched
+  # Desktop.Window webview — real browser/test clients have no way to
+  # obtain it. BDD specs (`test/spex/**/*_spex.exs`) and any future
+  # ExUnit tests drive routes with a plain `Phoenix.ConnTest.build_conn()`,
+  # so this plug is skipped in :test; every other env keeps the real check.
+  unless Mix.env() == :test do
+    plug Desktop.Auth
+  end
+
   plug EarWitnessWeb.Router
 end

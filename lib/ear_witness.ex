@@ -25,4 +25,5 @@ defmodule EarWitness do
   def recordings_dir(), do: Path.join(app_dir(), "recordings")
   def binaries_dir(), do: Path.join([:code.priv_dir(:ear_witness), "binaries"])
   def transcription_id(), do: Path.join(app_dir(), "transcripts")
+  def models_dir(), do: Path.join(app_dir(), "models")
 end

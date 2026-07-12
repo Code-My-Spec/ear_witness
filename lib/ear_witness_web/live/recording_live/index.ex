@@ -1,0 +1,268 @@
+defmodule EarWitnessWeb.RecordingLive.Index do
+  @moduledoc """
+  Recordings library — browse recordings grouped by case/collection,
+  import or record new ones, organize them into cases, and (on the
+  `:trash` action) restore recordings sent to the trash.
+  """
+
+  use EarWitnessWeb, :live_view
+
+  alias EarWitness.Recordings
+  alias EarWitness.Recordings.Collection
+  alias EarWitnessWeb.RecordingLive.Format
+
+  @impl true
+  def render(assigns) do
+    ~H"""
+    <div class="p-6 space-y-8">
+      <h1 class="text-2xl font-bold">Recordings</h1>
+
+      <div :if={@live_action == :index} class="space-y-8">
+        <div class="card bg-base-100 shadow-sm">
+          <div class="card-body">
+            <h2 class="card-title">Record</h2>
+            <div :if={@capture_error} data-test="capture-error" class="alert alert-error">
+              {@capture_error}
+            </div>
+            <div :if={@capturing?} data-test="capture-status" class="badge badge-error">recording</div>
+            <div :if={@capture_channels} data-test="capture-channels" class="text-sm opacity-70">
+              {Format.channels(@capture_channels)}
+            </div>
+            <div :if={@capture_notice == :shown} data-test="capture-notice" class="alert alert-info">
+              A notice is shown to participants that recording is active.
+            </div>
+            <div
+              :if={@capture_notice == :delivered}
+              data-test="announce-notice-status"
+              class="text-sm opacity-70"
+            >
+              delivered
+            </div>
+            <div class="flex gap-2">
+              <button type="button" class="btn btn-primary" phx-click="record" disabled={@capturing?}>
+                Record
+              </button>
+              <button type="button" class="btn" phx-click="stop" disabled={!@capturing?}>
+                Stop
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div class="card bg-base-100 shadow-sm">
+          <div class="card-body">
+            <h2 class="card-title">Import a recording</h2>
+            <div :if={@import_error} data-test="import-error" class="alert alert-error">
+              {@import_error}
+            </div>
+            <form id="import-form" data-test="import-form" phx-submit="import" phx-change="validate_import">
+              <.live_file_input upload={@uploads.audio_file} />
+              <button type="submit" class="btn btn-primary">Import</button>
+            </form>
+          </div>
+        </div>
+
+        <div class="card bg-base-100 shadow-sm">
+          <div class="card-body">
+            <h2 class="card-title">Cases</h2>
+            <form id="collection-form" data-test="collection-form" phx-submit="create_collection">
+              <input type="text" name="collection[name]" placeholder="Case name" class="input input-bordered" />
+              <input type="date" name="collection[date]" class="input input-bordered" />
+              <input
+                type="text"
+                name="collection[participants]"
+                placeholder="Participants"
+                class="input input-bordered"
+              />
+              <button type="submit" class="btn">Create case</button>
+            </form>
+
+            <div :for={collection <- @collections} data-test="collection" data-collection-id={collection.id} class="mt-4">
+              {collection.name}
+              <button
+                type="button"
+                data-test="delete-collection-button"
+                data-collection-id={collection.id}
+                phx-click="delete_collection"
+                phx-value-id={collection.id}
+                class="btn btn-xs"
+              >
+                Delete case
+              </button>
+              <div class="pl-4">
+                <.recording_row :for={recording <- collection.recordings} recording={recording} />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div data-test="uncategorized-recordings" class="card bg-base-100 shadow-sm">
+          <div class="card-body">
+            <h2 class="card-title">Uncategorized</h2>
+            <.recording_row :for={recording <- @uncategorized} recording={recording} />
+          </div>
+        </div>
+      </div>
+
+      <div :if={@live_action == :trash} class="space-y-4">
+        <div data-test="trash-retention-notice" class="alert">
+          Trashed recordings are kept for 30 days before permanent removal.
+        </div>
+        <div :for={recording <- @trashed_recordings} data-test="trash-row" data-recording-id={recording.id} class="flex items-center gap-2">
+          {recording.title}
+          <button type="button" data-test="restore-button" phx-click="restore" phx-value-id={recording.id} class="btn btn-xs">
+            Restore
+          </button>
+        </div>
+      </div>
+    </div>
+    """
+  end
+
+  attr :recording, EarWitness.Recordings.Recording, required: true
+
+  defp recording_row(assigns) do
+    ~H"""
+    <div data-test="recording-row" data-recording-id={@recording.id} class="flex items-center gap-2">
+      <a href={~p"/recordings/#{@recording.id}"} class="link">{@recording.title}</a>
+      <span data-test="recording-duration">{Format.duration(@recording.duration)}</span>
+      <span data-test="recording-source">{source_label(@recording)}</span>
+    </div>
+    """
+  end
+
+  # The library only ever distinguishes "captured" for microphone captures
+  # vs. "tap" for system-audio-tap captures (see `Recordings.finish_live_capture/1`);
+  # imported and bot-sourced recordings display their `source` as-is.
+  defp source_label(%{source: :captured, capture_source: :system_audio_tap}), do: "tap"
+  defp source_label(%{source: source}), do: to_string(source)
+
+  @impl true
+  def mount(_params, _session, socket) do
+    {:ok,
+     socket
+     |> assign(
+       import_error: nil,
+       capture_error: nil,
+       capturing?: false,
+       capture_ref: nil,
+       capture_channels: nil,
+       capture_notice: nil
+     )
+     |> reload_library()
+     |> allow_upload(:audio_file, accept: ~w(.wav), max_entries: 1)}
+  end
+
+  @impl true
+  def handle_event("validate_import", _params, socket), do: {:noreply, socket}
+
+  def handle_event("import", _params, socket) do
+    # The temp upload file is removed as soon as this callback returns, so
+    # the import (which reads it) must happen inside the callback rather
+    # than being deferred to after `consume_uploaded_entries/3` returns.
+    case consume_uploaded_entries(socket, :audio_file, fn %{path: path}, entry ->
+           {:ok, Recordings.import_recording(path, entry.client_name)}
+         end) do
+      [result] -> {:noreply, handle_import_result(socket, result)}
+      [] -> {:noreply, assign(socket, :import_error, "Choose a file to import.")}
+    end
+  end
+
+  def handle_event("record", _params, socket) do
+    {:noreply, handle_record(socket)}
+  end
+
+  def handle_event("stop", _params, socket) do
+    {:noreply, handle_stop(socket)}
+  end
+
+  def handle_event("create_collection", %{"collection" => params}, socket) do
+    case Recordings.create_collection(params) do
+      {:ok, _collection} -> {:noreply, reload_library(socket)}
+      {:error, _changeset} -> {:noreply, socket}
+    end
+  end
+
+  def handle_event("delete_collection", %{"id" => id}, socket) do
+    {:ok, _collection} = Recordings.delete_collection(%Collection{id: String.to_integer(id)})
+    {:noreply, reload_library(socket)}
+  end
+
+  def handle_event("restore", %{"id" => id}, socket) do
+    {:ok, recording} = Recordings.get_recording(id)
+    {:ok, _recording} = Recordings.restore_recording(recording)
+    {:noreply, reload_library(socket)}
+  end
+
+  defp handle_import_result(socket, result) do
+    case result do
+      {:ok, _recording} ->
+        socket |> assign(:import_error, nil) |> reload_library()
+
+      {:error, :invalid_audio_file} ->
+        assign(
+          socket,
+          :import_error,
+          "That file couldn't be imported — it isn't a usable recording."
+        )
+
+      {:error, _changeset} ->
+        assign(socket, :import_error, "That file couldn't be imported.")
+    end
+  end
+
+  defp handle_record(socket) do
+    case Recordings.start_live_capture() do
+      {:ok, %{ref: ref, channels: channels, notice: notice}} ->
+        assign(socket,
+          capture_ref: ref,
+          capturing?: true,
+          capture_channels: channels,
+          capture_notice: notice,
+          capture_error: nil
+        )
+
+      {:error, :no_input_device} ->
+        assign(socket,
+          capture_error: "No input device is available.",
+          capturing?: false,
+          capture_notice: nil
+        )
+
+      {:error, :notice_undelivered} ->
+        assign(socket,
+          capture_error:
+            "The announce policy's notice couldn't be delivered — capture was refused.",
+          capturing?: false,
+          capture_notice: nil
+        )
+
+      {:error, :source_unavailable} ->
+        assign(socket,
+          capture_error: "That capture source isn't available.",
+          capturing?: false,
+          capture_notice: nil
+        )
+    end
+  end
+
+  defp handle_stop(socket) do
+    case Recordings.finish_live_capture(socket.assigns.capture_ref) do
+      {:ok, _recording, channels} ->
+        socket
+        |> assign(capturing?: false, capture_ref: nil, capture_channels: channels)
+        |> reload_library()
+
+      {:error, _reason} ->
+        assign(socket, capturing?: false, capture_ref: nil)
+    end
+  end
+
+  defp reload_library(socket) do
+    assign(socket,
+      collections: Recordings.list_collections(),
+      uncategorized: Recordings.list_uncategorized_recordings(),
+      trashed_recordings: Recordings.list_trashed_recordings()
+    )
+  end
+end
