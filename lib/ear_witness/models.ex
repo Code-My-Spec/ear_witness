@@ -186,11 +186,24 @@ defmodule EarWitness.Models do
 
   # Falls back to the bundled model when nothing has been explicitly
   # activated, so a fresh install is never left with no usable model.
-  defp active_model_id, do: settings().active_model_id || Catalog.bundled_model_id()
+  # Read-only (see read_settings/0): reading the active model must never
+  # write — get_active_model is called on many page mounts.
+  defp active_model_id, do: read_settings().active_model_id || Catalog.bundled_model_id()
 
-  # Singleton row. Two concurrent first-requests can both see an empty
-  # table and both insert (TOCTOU) — so tolerate duplicates: always use the
-  # lowest-id row and prune any extras rather than crashing on `[a, b]`.
+  # Read-only accessor: NEVER writes. Returns the singleton row or an
+  # unpersisted %ModelSettings{} (active_model_id nil, so callers fall back).
+  # Avoids the write-on-read INSERT that raced other writes on a fresh DB.
+  defp read_settings do
+    case Repo.all(from(s in ModelSettings, order_by: s.id, limit: 1)) do
+      [settings | _] -> settings
+      [] -> %ModelSettings{}
+    end
+  end
+
+  # Get-or-create for WRITES only (activate/2 needs a persisted row).
+  # Two concurrent first-requests can both see an empty table and both insert
+  # (TOCTOU) — so tolerate duplicates: always use the lowest-id row and prune
+  # any extras rather than crashing on `[a, b]`.
   defp settings do
     case Repo.all(from(s in ModelSettings, order_by: s.id)) do
       [] -> insert_singleton()

@@ -44,7 +44,7 @@ defmodule EarWitness.Audio do
 
   @doc "Returns the capture source the next call to `start_capture/1` will use."
   @spec get_active_capture_source() :: :microphone | :system_audio_tap
-  def get_active_capture_source, do: settings().active_capture_source
+  def get_active_capture_source, do: read_settings().active_capture_source
 
   @doc "Persists the capture source that future captures will use."
   @spec set_active_capture_source(:microphone | :system_audio_tap) ::
@@ -64,7 +64,7 @@ defmodule EarWitness.Audio do
 
   @doc "Returns the recording consent/notification policy currently governing capture."
   @spec get_consent_policy() :: :silent | :notify | :announce
-  def get_consent_policy, do: settings().consent_policy
+  def get_consent_policy, do: read_settings().consent_policy
 
   @doc "Persists the recording consent/notification policy that will govern future captures."
   @spec set_consent_policy(:silent | :notify | :announce) :: {:ok, :silent | :notify | :announce}
@@ -133,8 +133,22 @@ defmodule EarWitness.Audio do
 
   defp levels_topic(ref), do: "audio_levels:#{inspect(ref)}"
 
-  # Singleton row — tolerate the concurrent-insert race by always using the
-  # lowest-id row and pruning duplicates (see EarWitness.Models.settings/0).
+  # Read-only accessor: NEVER writes. Returns the singleton row, or an
+  # unpersisted %Settings{} carrying the schema defaults (:microphone /
+  # :notify) when the row doesn't exist yet. Readers (get_active_capture_source,
+  # get_consent_policy) use this so a page mount / consent check never triggers
+  # an INSERT — write-on-read was a real lock-contention source (a fresh test
+  # DB inserts the singleton on first access, racing the run's other writes).
+  defp read_settings do
+    case Repo.all(from(s in Settings, order_by: s.id, limit: 1)) do
+      [settings | _] -> settings
+      [] -> %Settings{}
+    end
+  end
+
+  # Get-or-create for WRITES only (set_* needs a persisted row to update).
+  # Tolerates the concurrent-insert race by always using the lowest-id row and
+  # pruning duplicates (see EarWitness.Models.settings/0).
   defp settings do
     case Repo.all(from(s in Settings, order_by: s.id)) do
       [] ->
