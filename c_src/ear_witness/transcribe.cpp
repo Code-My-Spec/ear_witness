@@ -5,6 +5,7 @@
 #include <string>
 #include <thread>
 #include <sstream>
+#include <cstring> // strlen — libstdc++ (Linux) needs this explicitly
 
 struct whisper_params
 {
