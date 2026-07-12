@@ -73,30 +73,55 @@ defmodule EarWitnessSpex.Fixtures do
   recognizes that voice automatically (story 862, criterion 7341) or, after
   the signature is deleted, no longer recognizes it (criterion 7344).
 
-  Staging this honestly means driving a full round trip through the real
-  `Speakers.Diarizer` + `Speakers.Identifier` seams (transcribe a first
-  recording, name the resulting speaker, then cluster/match a second
-  recording's voice embedding against the stored centroid) — none of which
-  exist yet. Raising keeps both specs honestly red until that seam lands,
-  rather than faking a "known speaker" into existence.
+  Drives a full round trip through the real `EarWitness.Speakers.Diarizer`
+  seam: creates a seed recording, transcribes it, diarizes it (which
+  creates a fresh, unnamed `Speaker` carrying a real voice-embedding
+  centroid — see `EarWitness.Speakers.diarize_transcript/1`), then names
+  that speaker `name`, exactly as a user would after their first
+  recording of this person. Titling the seed recording
+  `*-with-\#{name}.wav` matters: every `"*-meeting-with-\#{name}.wav"`
+  recording a spec imports afterward replays the same `known_voice`
+  diarizer cassette (see `EarWitnessTest.RecordedDiarizer`), so its
+  first turn's embedding genuinely cosine-matches this speaker's stored
+  centroid rather than being faked into matching.
   """
-  def simulate_known_speaker_with_voice_signature(_name) do
-    raise "EarWitness.Speakers.Diarizer/Identifier voice-signature seam not implemented yet " <>
-            "(story 862, criteria 7341, 7344)"
+  def simulate_known_speaker_with_voice_signature(name) do
+    path = Path.join(EarWitness.recordings_dir(), Ecto.UUID.generate() <> ".wav")
+    File.mkdir_p!(Path.dirname(path))
+    wav = bot_recording_wav()
+    File.write!(path, wav)
+    {:ok, header} = EarWitness.Recordings.WavHeader.parse(wav)
+
+    {:ok, recording} =
+      EarWitness.Recordings.create_recording(%{
+        title: "voice-signature-seed-with-#{name}.wav",
+        source: :imported,
+        file_path: path,
+        duration: header.duration_seconds
+      })
+
+    {:ok, _transcript} = EarWitness.Transcription.transcribe(recording)
+    {:ok, transcript} = EarWitness.Transcription.get_transcript_for_recording(recording.id)
+    :ok = EarWitness.Speakers.diarize_transcript(transcript)
+    {:ok, transcript} = EarWitness.Transcription.get_transcript_for_recording(recording.id)
+
+    [first_segment | _] = transcript.segments
+    {:ok, _speaker} = EarWitness.Speakers.rename_speaker(first_segment.speaker_id, name)
+
+    :ok
   end
 
   @doc """
-  Makes a transcribed recording's segments carry two distinct detected
-  speakers (spec 7346 — "Move a segment to the right speaker"). Speaker
-  diarization (`EarWitness.Speakers.Diarizer`, story 862) is what would
-  honestly produce more than one detected speaker on a transcript; until
-  that seam lands there is no way through the real UI to stage this
-  precondition, so this raises rather than faking the attribution.
+  No-op: `EarWitness.Speakers.Diarizer` now really exists, and any
+  recording titled `"two-person-hearing.wav"` genuinely diarizes to two
+  distinct detected speakers once transcribed (see
+  `EarWitnessTest.RecordedDiarizer`'s `two_speakers` cassette) — nothing
+  needs to be staged ahead of the real transcribe flow anymore. Kept
+  (rather than deleted) so story 863's criterion 7346 spec doesn't need
+  to change shape now that its precondition is honestly satisfiable
+  through the real seam.
   """
-  def simulate_two_speakers_detected do
-    raise "EarWitness.Speakers.Diarizer seam not implemented yet (story 862); " <>
-            "needed to stage two distinct detected speakers for story 863, criterion 7346"
-  end
+  def simulate_two_speakers_detected, do: :ok
 
   @doc """
   Interrupts an in-progress model download partway through, the way a

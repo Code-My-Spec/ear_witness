@@ -34,6 +34,7 @@ config :ear_witness, Oban, testing: :inline
 # EarWitness.Bots (see EarWitnessSpex.Fixtures.simulate_bot_*/1).
 config :ear_witness,
   transcription_engine: EarWitnessTest.RecordedTranscriptionEngine,
+  diarizer: EarWitnessTest.RecordedDiarizer,
   capture_source: :fixture,
   bot_relay: EarWitnessTest.PendingBotRelay
 

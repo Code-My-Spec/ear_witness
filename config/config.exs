@@ -64,11 +64,12 @@ config :ear_witness, Oban,
   queues: [default: 10],
   repo: EarWitness.Repo
 
-# Transcription engine / capture device / bot relay seams (see
-# .code_my_spec/knowledge/bdd/spex/index.md). Test env overrides all
-# three to the recorded/fixture/pending doubles in config/test.exs.
+# Transcription engine / diarizer / capture device / bot relay seams
+# (see .code_my_spec/knowledge/bdd/spex/index.md). Test env overrides
+# all four to the recorded/fixture/pending doubles in config/test.exs.
 config :ear_witness,
   transcription_engine: EarWitness.Transcription.Engine,
+  diarizer: EarWitness.Speakers.Diarizer.Onnx,
   capture_source: :portaudio,
   bot_relay: EarWitness.Bots.Runner.Relay
 

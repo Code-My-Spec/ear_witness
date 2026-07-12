@@ -12,11 +12,12 @@ defmodule EarWitness.Speakers.Speaker do
   schema "speakers" do
     field(:name, :string)
     field(:color, :string)
+    field(:embedding, {:array, :float})
 
     timestamps()
   end
 
   def changeset(speaker, attrs) do
-    cast(speaker, attrs, [:name, :color])
+    cast(speaker, attrs, [:name, :color, :embedding])
   end
 end

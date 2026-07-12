@@ -1,7 +1,9 @@
 # Speaker diarization via ONNX models (ortex) + clustering
 
 ## Status
-Proposed
+Implemented (`EarWitness.Speakers.Diarizer.Onnx` and friends under
+`lib/ear_witness/speakers/diarizer/`) — see "Implementation notes" below
+for what shipped versus what remains scoped out.
 
 ## Context
 Hearing transcripts are only quotable if you can tell who said what
@@ -28,3 +30,31 @@ embedding model and clustering parameters before implementation.
 - Adds model files to the bundle; increases first-run download size.
 - Diarization quality on far-field hearing audio is the main risk — validate
   against real recordings early.
+
+## Implementation notes
+
+- Within-recording attribution: `segmentation-3.0.onnx` runs once over
+  the whole recording (not pyannote's sliding-window-plus-overlap-add —
+  see the moduledoc on `EarWitness.Speakers.Diarizer.Onnx` for why a
+  single pass is honest for short/medium recordings and what's cut),
+  producing per-frame local speaker classes; contiguous runs are
+  refined into consistent speaker identities via real spectral
+  clustering (`EarWitness.Speakers.Diarizer.SpectralClustering` — cosine
+  affinity, normalized Laplacian, `Nx.LinAlg.eigh`, eigengap `k`
+  selection, k-means).
+- Cross-recording matching: a WeSpeaker ResNet34 voice-embedding model
+  (`priv/models/voxceleb_resnet34_LM.onnx`, fetched from
+  https://huggingface.co/Wespeaker/wespeaker-voxceleb-resnet34-LM,
+  sha256 `7bb2f06e9df17cdf1ef14ee8a15ab08ed28e8d0ef5054ee135741560df2ec068`)
+  is fed 80-bin log-mel features extracted by a from-scratch
+  `EarWitness.Speakers.Diarizer.Fbank` (no Kaldi/torchaudio dependency
+  bundled) — not guaranteed bit-exact with the model's training
+  preprocessing; `EarWitness.Speakers.@match_threshold` is calibrated
+  from real measurements against `test/fixtures/diarize.raw` rather
+  than a paper-default value, and should be retuned against a broader
+  set of real recordings.
+- Long recordings (beyond a few minutes) are the main known quality gap
+  versus pyannote's own pipeline — the sliding-window aggregation that
+  would fix it is the still-unfinished part of
+  `EarWitness.Audio.SpeakerDiarizationSplitter`/`Windows` (a different,
+  Membrane-streaming-pipeline concern from this post-hoc batch pass).

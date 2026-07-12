@@ -17,6 +17,7 @@ defmodule EarWitness.Transcription.Transcript do
     )
 
     field(:engine, :string)
+    field(:diarized_at, :utc_datetime)
 
     belongs_to(:recording, Recording)
     has_many(:segments, Segment)
@@ -26,7 +27,7 @@ defmodule EarWitness.Transcription.Transcript do
 
   def changeset(transcript, attrs) do
     transcript
-    |> cast(attrs, [:recording_id, :status, :engine])
+    |> cast(attrs, [:recording_id, :status, :engine, :diarized_at])
     |> validate_required([:recording_id, :status])
     |> foreign_key_constraint(:recording_id)
     |> unique_constraint(:recording_id)

@@ -1,47 +1,68 @@
 defmodule EarWitness.Speakers do
   @moduledoc """
-  Who said what. Attributes transcript segments to speakers, and lets a
-  detected speaker be named or forgotten.
+  Who said what. Diarizes transcripts via the `EarWitness.Speakers.Diarizer`
+  seam (VAD-free segmentation, spectral clustering, and WeSpeaker voice
+  embeddings, all on-device — see
+  `.code_my_spec/architecture/decisions/speaker-diarization.md`), and
+  lets a detected speaker be named or forgotten.
 
-  Full diarization (VAD + speaker-embedding ONNX models via ortex,
-  clustering voice signatures within and across recordings — see
-  `.code_my_spec/architecture/decisions/speaker-diarization.md`) is not
-  implemented yet: `diarize_transcript/1` collapses every segment of a
-  transcript to a single detected speaker rather than fabricating
-  multi-speaker attribution it cannot honestly produce. That single
-  speaker can still be named, and the name propagates to every segment,
-  same as it would with real diarization.
+  Depends on `EarWitness.Recordings` (to look up a transcript's
+  recording and hand its audio file to the diarizer) in addition to
+  `EarWitness.Models` and `EarWitness.Transcription` — see
+  `.code_my_spec/spec/ear_witness/speakers.spec.md`.
+
+  Cross-recording recognition: before a newly detected speaker becomes a
+  new `Speaker` row, its voice-embedding centroid is matched (cosine
+  similarity) against every existing speaker's stored embedding — a
+  strong match reuses that speaker's id instead, so a recurring voice
+  keeps resolving to the same named person across recordings.
+  `forget_speaker/1` deletes the row (embedding included), so nothing
+  about that voice can match again.
+
+  Overlapping or unclear speech doesn't get guessed into either
+  candidate speaker: `diarize_transcript/1` leaves those segments
+  unattributed (`speaker_id: nil`), which `label/2` renders as
+  "Unknown".
   """
 
   import Ecto.Query
 
+  alias EarWitness.Recordings
   alias EarWitness.Repo
   alias EarWitness.Speakers.Speaker
   alias EarWitness.Transcription.{Segment, Transcript}
 
+  # Cosine similarity above which two embeddings are considered the same
+  # voice. `EarWitness.Speakers.Diarizer.Fbank` isn't bit-exact with the
+  # Kaldi feature extraction the embedding model trained against (see
+  # its moduledoc), so this is calibrated from real measurements against
+  # `test/fixtures/diarize.raw` (same speaker, independent turns:
+  # 0.44-0.67 cosine similarity; different speakers: 0.15-0.39) rather
+  # than a value borrowed from the model's own paper — expect to retune
+  # this against a broader set of real recordings.
+  @match_threshold 0.5
+
   @doc """
-  Assigns every segment of a transcript to a detected speaker, unless the
-  transcript has already been diarized. Safe to call every time the
-  transcript editor mounts.
+  Assigns every segment of a transcript to a detected speaker (or to no
+  speaker, for overlapping/unclear speech), unless the transcript has
+  already been diarized. Safe to call every time the transcript editor
+  mounts.
   """
   @spec diarize_transcript(Transcript.t()) :: :ok
-  def diarize_transcript(%Transcript{segments: segments}) do
-    segments
-    |> Enum.reject(& &1.speaker_id)
-    |> attach_default_speaker()
+  def diarize_transcript(%Transcript{diarized_at: diarized_at}) when not is_nil(diarized_at) do
+    :ok
   end
 
-  defp attach_default_speaker([]), do: :ok
+  def diarize_transcript(%Transcript{} = transcript) do
+    {:ok, recording} = Recordings.get_recording(transcript.recording_id)
+    diarizer = Application.get_env(:ear_witness, :diarizer, EarWitness.Speakers.Diarizer.Onnx)
 
-  defp attach_default_speaker(unassigned_segments) do
-    {:ok, speaker} = %Speaker{} |> Speaker.changeset(%{}) |> Repo.insert()
+    case diarizer.diarize(recording) do
+      {:ok, turns} -> apply_diarization(transcript, turns)
+      {:error, _reason} -> mark_diarized(transcript)
+    end
 
-    unassigned_segments
-    |> Enum.each(fn segment ->
-      segment
-      |> Segment.changeset(%{speaker_id: speaker.id})
-      |> Repo.update!()
-    end)
+    :ok
   end
 
   @doc "Lists the speakers detected on a transcript, in a stable display order."
@@ -89,5 +110,103 @@ defmodule EarWitness.Speakers do
     |> Repo.delete!()
 
     :ok
+  end
+
+  # -- diarization -------------------------------------------------------
+
+  defp apply_diarization(transcript, turns) do
+    speaker_ids_by_cluster = resolve_clusters(turns)
+
+    Enum.each(transcript.segments, fn segment ->
+      speaker_id = best_speaker_id(segment, turns, speaker_ids_by_cluster)
+
+      segment
+      |> Segment.changeset(%{speaker_id: speaker_id})
+      |> Repo.update!()
+    end)
+
+    mark_diarized(transcript)
+  end
+
+  # One resolved (matched-or-created) Speaker id per non-`nil` cluster —
+  # so every turn belonging to the same detected voice within this call
+  # maps to the same Speaker row, created once.
+  defp resolve_clusters(turns) do
+    turns
+    |> Enum.reject(&is_nil(&1.cluster))
+    |> Enum.group_by(& &1.cluster)
+    |> Map.new(fn {cluster, cluster_turns} -> {cluster, resolve_speaker_id(cluster_turns)} end)
+  end
+
+  defp resolve_speaker_id(cluster_turns) do
+    embedding =
+      cluster_turns
+      |> Enum.map(& &1.embedding)
+      |> Enum.reject(&is_nil/1)
+      |> centroid()
+
+    case embedding && find_matching_speaker(embedding) do
+      %Speaker{id: id} -> id
+      _ -> create_speaker(embedding).id
+    end
+  end
+
+  defp find_matching_speaker(embedding) do
+    Speaker
+    |> Repo.all()
+    |> Enum.reject(&is_nil(&1.embedding))
+    |> Enum.map(&{&1, cosine_similarity(&1.embedding, embedding)})
+    |> Enum.filter(fn {_speaker, similarity} -> similarity >= @match_threshold end)
+    |> Enum.max_by(fn {_speaker, similarity} -> similarity end, fn -> {nil, 0.0} end)
+    |> elem(0)
+  end
+
+  defp create_speaker(embedding) do
+    {:ok, speaker} = %Speaker{} |> Speaker.changeset(%{embedding: embedding}) |> Repo.insert()
+    speaker
+  end
+
+  # The cluster whose turns overlap `segment` the most (by total
+  # millisecond overlap) wins its attribution; a segment with no
+  # overlapping turn, or whose best-overlapping turn is an ambiguous one
+  # (`cluster: nil`), is left unattributed ("Unknown").
+  defp best_speaker_id(segment, turns, speaker_ids_by_cluster) do
+    turns
+    |> Enum.map(&{&1.cluster, overlap_ms(segment, &1)})
+    |> Enum.filter(fn {_cluster, overlap} -> overlap > 0 end)
+    |> Enum.group_by(&elem(&1, 0), &elem(&1, 1))
+    |> Enum.map(fn {cluster, overlaps} -> {cluster, Enum.sum(overlaps)} end)
+    |> Enum.max_by(&elem(&1, 1), fn -> {nil, 0} end)
+    |> elem(0)
+    |> then(&Map.get(speaker_ids_by_cluster, &1))
+  end
+
+  defp overlap_ms(%Segment{start_offset: s, end_offset: e}, %{start_ms: ts, end_ms: te}) do
+    max(0, min(e, te) - max(s, ts))
+  end
+
+  defp mark_diarized(transcript) do
+    transcript
+    |> Transcript.changeset(%{diarized_at: DateTime.utc_now() |> DateTime.truncate(:second)})
+    |> Repo.update!()
+  end
+
+  defp centroid([]), do: nil
+
+  defp centroid(embeddings) do
+    dimensions = embeddings |> hd() |> length()
+    zero = List.duplicate(0.0, dimensions)
+
+    embeddings
+    |> Enum.reduce(zero, fn embedding, acc -> Enum.zip_with(embedding, acc, &+/2) end)
+    |> Enum.map(&(&1 / length(embeddings)))
+  end
+
+  defp cosine_similarity(a, b) do
+    dot = Enum.zip_with(a, b, &*/2) |> Enum.sum()
+    norm_a = a |> Enum.map(&(&1 * &1)) |> Enum.sum() |> :math.sqrt()
+    norm_b = b |> Enum.map(&(&1 * &1)) |> Enum.sum() |> :math.sqrt()
+
+    if norm_a == 0.0 or norm_b == 0.0, do: 0.0, else: dot / (norm_a * norm_b)
   end
 end

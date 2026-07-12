@@ -45,6 +45,21 @@ defmodule EarWitness.Recordings.WavHeader do
 
   def parse(_not_a_wav), do: {:error, :invalid_audio_file}
 
+  @doc """
+  Returns a WAV file's raw PCM sample bytes (the `data` chunk payload,
+  undecoded). Still pure parsing, no I/O — callers read the bytes and
+  hand them in, same as `parse/1`.
+  """
+  @spec data_bytes(binary()) :: {:ok, binary()} | {:error, :invalid_audio_file}
+  def data_bytes(<<"RIFF", _riff_size::little-32, "WAVE", rest::binary>>) do
+    case find_chunk(rest, "data") do
+      {:ok, data} -> {:ok, data}
+      _ -> {:error, :invalid_audio_file}
+    end
+  end
+
+  def data_bytes(_not_a_wav), do: {:error, :invalid_audio_file}
+
   defp find_chunk(
          <<id::binary-size(4), size::little-32, chunk::binary-size(size), rest::binary>>,
          target

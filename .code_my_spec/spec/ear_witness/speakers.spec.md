@@ -10,3 +10,5 @@ context
 
 - EarWitness.Models
 - EarWitness.Transcription
+- EarWitness.Recordings (looks up a transcript's recording to hand its
+  audio file to `EarWitness.Speakers.Diarizer`)
