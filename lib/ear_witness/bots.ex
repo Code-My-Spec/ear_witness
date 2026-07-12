@@ -47,8 +47,16 @@ defmodule EarWitness.Bots do
           {:ok, BotSession.t()} | {:error, :not_found | :not_recallable}
   def recall_bot(id) do
     with {:ok, session} <- fetch_session(id),
-         :ok <- ensure_recallable(session) do
-      update_status(session, %{status: :recalled})
+         :ok <- ensure_recallable(session),
+         {:ok, recalled} <- update_status(session, %{status: :recalled}) do
+      # Stop the still-running bot process. Only the USER-initiated recall
+      # does this — and it runs in the caller's process (the LiveView), not
+      # the Runner, so GenServer.stop targets a different pid. The Runner's
+      # own terminal transitions (fail/complete) must NOT reach here: those
+      # are called from inside the Runner's callback, where stopping itself
+      # crashes it before the status is persisted (issue 07bd9c94).
+      _ = Runner.recall(session.id)
+      {:ok, recalled}
     end
   end
 
@@ -102,8 +110,6 @@ defmodule EarWitness.Bots do
   defp ensure_recallable(%BotSession{}), do: :ok
 
   defp update_status(session, attrs) do
-    if terminal?(attrs[:status]), do: Runner.recall(session.id)
-
     session
     |> Ecto.Changeset.change(attrs)
     |> Repo.update()
@@ -116,8 +122,6 @@ defmodule EarWitness.Bots do
         error
     end
   end
-
-  defp terminal?(status), do: status in [:completed, :recalled, :failed]
 
   defp fetch_session(id) do
     case Repo.get(BotSession, id) do
