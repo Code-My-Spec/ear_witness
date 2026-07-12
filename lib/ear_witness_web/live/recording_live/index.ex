@@ -342,8 +342,11 @@ defmodule EarWitnessWeb.RecordingLive.Index do
   defp handle_stop(socket) do
     case Recordings.finish_live_capture(socket.assigns.capture_ref) do
       {:ok, _recording, channels} ->
+        # Clear capture_notice — leaving it set keeps a stale "recording is
+        # active" notice on screen after recording has stopped, which is
+        # exactly the consent mechanic story 861 depends on (861 QA finding).
         socket
-        |> assign(capturing?: false, capture_ref: nil, capture_channels: channels)
+        |> assign(capturing?: false, capture_ref: nil, capture_channels: channels, capture_notice: nil)
         |> reload_library()
 
       {:error, reason} ->
@@ -352,6 +355,7 @@ defmodule EarWitnessWeb.RecordingLive.Index do
         assign(socket,
           capturing?: false,
           capture_ref: nil,
+          capture_notice: nil,
           capture_error: "Recording could not be saved (#{format_capture_error(reason)})."
         )
     end
