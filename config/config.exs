@@ -1,15 +1,5 @@
 import Config
 
-# On Linux, Membrane's precompiled portaudio binary links libmpdec.so.4 (absent
-# on most distros, including the Ubuntu build runner), which breaks release
-# packaging when deployment resolves NIF dependencies. Build the portaudio NIF
-# against the system library (pkg-config) instead. macOS keeps the precompiled
-# binary, which works there. Evaluated on the build machine at compile time, so
-# it only affects Linux builds.
-if :os.type() == {:unix, :linux} do
-  config :bundlex, :disable_precompiled_os_deps, apps: [:membrane_portaudio_plugin]
-end
-
 config :esbuild,
   version: "0.12.18",
   default: [
@@ -70,7 +60,7 @@ config :ear_witness, Oban,
 config :ear_witness,
   transcription_engine: EarWitness.Transcription.Engine,
   diarizer: EarWitness.Speakers.Diarizer.Onnx,
-  capture_source: :portaudio,
+  capture_source: :miniaudio,
   bot_relay: EarWitness.Bots.Runner.Relay
 
 # CodeMySpec support widget (chat + feedback). The deploy key and any

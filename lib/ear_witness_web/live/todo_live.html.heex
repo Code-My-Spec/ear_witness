@@ -25,17 +25,17 @@
 
 <div class="record-buttons">
   <button 
-    phx-click={JS.push("record", value: %{input: @selected_input, output: @selected_output})}
-    disabled={@selected_input == nil || @selected_output == nil}
+    phx-click={JS.push("record", value: %{input: @selected_input})}
+    disabled={@selected_input == nil}
   >
     Record
   </button>
 
   <button 
     phx-click={JS.push("stop")}
-    disabled={@pipeline_pid == nil}
+    disabled={@capture_handle == nil}
   >
-    Stop <%= inspect(@pipeline_pid) %>
+    Stop
   </button>
 </div>
 

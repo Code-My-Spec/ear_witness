@@ -35,7 +35,7 @@ config :ear_witness, Oban, testing: :inline
 
 # Substitution seams for BDD specs (see .code_my_spec/knowledge/bdd/spex/index.md).
 # The engine double replays RECORDED real whisper.cpp responses — never
-# hand-written output. Capture uses fixture WAV bytes instead of portaudio.
+# hand-written output. Capture uses fixture WAV bytes instead of miniaudio.
 # The bot relay has no real meeting to join, so it stays permanently
 # pending — specs stage join/record/leave outcomes directly through
 # EarWitness.Bots (see EarWitnessSpex.Fixtures.simulate_bot_*/1).

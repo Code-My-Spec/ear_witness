@@ -152,12 +152,6 @@ defmodule EarWitness.MixProject do
       {:anubis_mcp, "~> 1.6"},
 
       # Libraries
-      {:membrane_core, "~> 1.0"},
-      {:membrane_portaudio_plugin, "~> 0.19.6"},
-      {:membrane_audio_mix_plugin, "~> 0.16"},
-      {:membrane_raw_audio_format, "~> 0.12.0"},
-      {:membrane_raw_audio_parser_plugin, "~> 0.5.0"},
-      {:membrane_file_plugin, "~> 0.17"},
       {:ortex, "~> 0.1.10"},
       {:nx, "~> 0.7"},
       # lazy_html (Phoenix.LiveViewTest's DOM dep, added for BDD spex) still

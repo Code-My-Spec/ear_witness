@@ -24,11 +24,12 @@ defmodule EarWitness.Speakers.Diarizer.Onnx do
   distinct voices, both within a recording and across recordings.
 
   Whole-file single pass, not the sliding-window-plus-overlap-add
-  aggregation pyannote's own pipeline uses for long recordings (see the
-  partial, unfinished attempt at that in
-  `EarWitness.Audio.SpeakerDiarizationSplitter`/`Windows` — built for
-  the live-capture Membrane pipeline's streaming needs, a different
-  concern from this post-hoc, whole-file pass). A deliberate, documented
+  aggregation pyannote's own pipeline uses for long recordings (a partial,
+  unfinished attempt at that lived in `EarWitness.Audio.SpeakerDiarizationSplitter`
+  and `Windows`, built for the now-removed Membrane live-capture pipeline's
+  streaming needs — a different concern from this post-hoc, whole-file
+  pass — and was deleted with Membrane; see the miniaudio-capture ADR). A
+  deliberate, documented
   scope cut for now: the segmentation model's own recurrent state
   already threads consistently across a single forward pass, so a
   single pass is honest and correct for recordings up to a few minutes;

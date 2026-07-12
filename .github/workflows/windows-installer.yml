@@ -9,10 +9,15 @@ name: "Windows Installer"
 # - The whisper transcription NIF is skipped on Windows (no-op Makefile.win);
 #   transcription is unavailable until the model work lands, same as elsewhere.
 on:
-  # Parked (manual-only): the native audio stack (Membrane/shmex/portaudio) has
-  # no Windows support — shmex is POSIX-only. Re-enable push/tags once a
-  # browser/getUserMedia (:browser) capture source replaces backend PortAudio
-  # capture. The toolchain here (setup-beam OTP+wx, NSIS) is otherwise ready.
+  # Parked (manual-only): Membrane/shmex (POSIX-only shared memory) has been
+  # replaced by a miniaudio C NIF (see the miniaudio-capture ADR), which
+  # does support Windows (WASAPI, including native loopback capture) —
+  # that Windows-support blocker is gone. Still manual-dispatch-only
+  # because the miniaudio Windows path has not yet been exercised on real
+  # Windows hardware/CI; trigger this workflow manually and confirm a
+  # green build (including a real capture smoke test) before re-enabling
+  # push/tags. The toolchain here (setup-beam OTP+wx, NSIS) is otherwise
+  # ready.
   workflow_dispatch:
 
 permissions:

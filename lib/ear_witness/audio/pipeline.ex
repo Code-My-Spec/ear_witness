@@ -5,18 +5,18 @@ defmodule EarWitness.Audio.Pipeline do
   :capture_source`) substitutes canned WAV bytes for real device I/O, so
   specs can drive the real Record/Stop UI on any machine.
 
-  Real microphone capture wraps `Membrane.PortAudio.Source` directly (see
-  `EarWitness.Audio.Pipeline.Microphone`). Real system-audio-tap capture is
-  not implemented yet — no Core Audio / WASAPI integration exists (see the
-  membrane-audio-capture ADR); `EarWitness.Audio.Tap` reports it
-  unavailable outside the fixture seam.
+  Real capture goes through `EarWitness.Audio.Miniaudio`, a miniaudio C
+  NIF (see the miniaudio-capture ADR): microphone capture works on every
+  platform; system-audio-tap (loopback) capture works on Windows and Linux
+  and is not available on macOS (`EarWitness.Audio.Tap` reports it
+  unavailable there — see the macos-system-audio-tap ADR).
   """
 
-  alias EarWitness.Audio.{Captures, Tap}
+  alias EarWitness.Audio.{Captures, Miniaudio, Tap}
 
   @fixture_sample_rate 16_000
   @fixture_num_samples 8_000
-  # Must match Pipeline.Microphone's PortAudio source config.
+  # Must match EarWitness.Audio.Miniaudio's capture sample rate.
   @capture_sample_rate 16_000
 
   @doc "Lists available microphone input devices — fixture devices in the `:fixture` test seam."
@@ -34,8 +34,12 @@ defmodule EarWitness.Audio.Pipeline do
         [%{id: :fixture_microphone, name: "Fixture Microphone"}]
 
       _real ->
-        Membrane.PortAudio.list_devices()
+        Miniaudio.list_devices()
         |> Enum.filter(&(&1.max_input_channels > 0))
+        # The NIF's enumeration order isn't guaranteed to put the default
+        # device first on every backend; `capture/2` always picks the head
+        # of this list, so pin the default device there explicitly.
+        |> Enum.sort_by(&(!&1.is_default))
     end
   end
 
@@ -65,8 +69,10 @@ defmodule EarWitness.Audio.Pipeline do
       nil ->
         {:error, :not_found}
 
-      %{kind: :real, pipeline_pid: pid, path: path, channels: channels} ->
-        Membrane.Pipeline.terminate(pid)
+      %{kind: :real, capture_handle: handle, path: path, channels: channels} ->
+        # Errors here are surfaced only as a possibly-incomplete file —
+        # finalize_wav/1 and downstream WavHeader.parse/1 catch that.
+        _ = Miniaudio.stop_capture(handle)
         finalize_wav(path)
         {:ok, %{channels: channels, path: path}}
 
@@ -75,19 +81,20 @@ defmodule EarWitness.Audio.Pipeline do
     end
   end
 
-  # Membrane.File.Sink writes the PortAudio source's raw f32le samples with
-  # no container — downstream (WavHeader.parse, the whisper engine, import
-  # normalization) all expect a real PCM16 WAV, so finalize the capture into
-  # one. Found by story-860 QA against the real microphone path (the
-  # :fixture seam already produced valid WAV, which is why no spec caught
-  # it). Skips files that already carry a RIFF header.
+  # EarWitness.Audio.Miniaudio.stop_capture/1 already writes a complete
+  # RIFF/WAVE file, so this is normally a no-op — kept as a defensive
+  # safety net (story-860 QA originally found the prior Membrane raw-sample
+  # sink needed this finalize step; a NIF write failure or empty capture
+  # leaving a non-RIFF or missing file falls through here too, and
+  # WavHeader.parse/1 catches whatever finalize_wav/1 can't fix).
   defp finalize_wav(path) do
-    with {:ok, <<head::binary-size(4), _rest::binary>> = raw} when head != "RIFF" <-
-           File.read(path) do
-      pcm16 = f32le_to_s16le(raw)
-      File.write!(path, pcm16_wav(pcm16, @capture_sample_rate))
-    else
-      _ -> :ok
+    case File.read(path) do
+      {:ok, <<head::binary-size(4), _rest::binary>> = raw} when head != "RIFF" ->
+        pcm16 = f32le_to_s16le(raw)
+        File.write!(path, pcm16_wav(pcm16, @capture_sample_rate))
+
+      _already_wav_or_unreadable ->
+        :ok
     end
   end
 
@@ -140,25 +147,50 @@ defmodule EarWitness.Audio.Pipeline do
   defp start_real(:microphone, path) do
     [device | _] = input_devices()
 
-    {:ok, _supervisor_pid, pipeline_pid} =
-      Membrane.Pipeline.start_link(EarWitness.Audio.Pipeline.Microphone,
-        device_id: device.id,
-        path: path
-      )
+    case Miniaudio.start_capture(device_index(device), path) do
+      {:ok, handle} ->
+        ref = make_ref()
 
-    ref = make_ref()
+        Captures.put(ref, %{
+          kind: :real,
+          capture_handle: handle,
+          path: path,
+          channels: [:microphone]
+        })
 
-    Captures.put(ref, %{
-      kind: :real,
-      pipeline_pid: pipeline_pid,
-      path: path,
-      channels: [:microphone]
-    })
+        {:ok, ref, [:microphone]}
 
-    {:ok, ref, [:microphone]}
+      {:error, _reason} ->
+        {:error, :no_input_device}
+    end
   end
 
-  defp start_real(:system_audio_tap, _path), do: {:error, :source_unavailable}
+  # System-audio-tap capture is loopback-only for now (Windows WASAPI
+  # loopback, Linux PulseAudio/PipeWire monitor source — see the
+  # miniaudio-capture ADR); it does not additionally mix in the
+  # microphone, unlike the `:fixture` seam's simulated
+  # `[:microphone, :system_audio]` double channel.
+  defp start_real(:system_audio_tap, path) do
+    case Miniaudio.start_loopback_capture(path) do
+      {:ok, handle} ->
+        ref = make_ref()
+
+        Captures.put(ref, %{
+          kind: :real,
+          capture_handle: handle,
+          path: path,
+          channels: [:system_audio]
+        })
+
+        {:ok, ref, [:system_audio]}
+
+      {:error, _reason} ->
+        {:error, :source_unavailable}
+    end
+  end
+
+  defp device_index(%{id: id}) when is_integer(id) and id >= 0, do: id
+  defp device_index(_device), do: -1
 
   defp channels_for(:microphone), do: [:microphone]
   defp channels_for(:system_audio_tap), do: [:microphone, :system_audio]
