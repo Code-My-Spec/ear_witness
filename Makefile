@@ -18,7 +18,11 @@ ifeq ($(UNAME_S),Darwin)
   WHISPER_LIB_DIRS = -L$(WHISPER_BUILD)/src -L$(WHISPER_BUILD)/ggml/src -L$(WHISPER_BUILD)/ggml/src/ggml-blas
   WHISPER_LIBS = -lwhisper -lggml -lggml-cpu -lggml-blas -lggml-base
   PLATFORM_LIBS = -framework Accelerate -framework Foundation
-  WHISPER_CMAKE_EXTRA =
+  # Force OpenMP OFF: if cmake auto-detects libomp it links ggml against
+  # __kmpc_* symbols, but the NIF link below doesn't pull in libomp, so the
+  # .so fails to dlopen ("symbol not found: ___kmpc_barrier"). Explicit-off
+  # keeps the build deterministic across machines with/without libomp.
+  WHISPER_CMAKE_EXTRA = -DGGML_OPENMP=OFF
   # miniaudio's Core Audio backend (see c_src/ear_witness/audio_capture.cpp)
   # needs these three frameworks. MA_NO_RUNTIME_LINKING switches miniaudio
   # from dlopen()-ing them at runtime to a normal direct link — miniaudio's
@@ -38,7 +42,7 @@ else
   WHISPER_LIB_DIRS = -L$(WHISPER_BUILD)/src -L$(WHISPER_BUILD)/ggml/src
   WHISPER_LIBS = -lwhisper -lggml -lggml-cpu -lggml-base
   PLATFORM_LIBS =
-  WHISPER_CMAKE_EXTRA = -DGGML_BLAS=OFF
+  WHISPER_CMAKE_EXTRA = -DGGML_BLAS=OFF -DGGML_OPENMP=OFF
   # miniaudio's ALSA/PulseAudio backends runtime-link via dlopen and use
   # pthreads (see miniaudio.h's own "Compiling" notes). Covers Linux;
   # Windows (WASAPI, built into the OS) needs no extra libs here.
