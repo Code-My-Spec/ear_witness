@@ -26,12 +26,14 @@ defmodule EarWitnessWeb.BotLive do
   @impl true
   def render(assigns) do
     ~H"""
-    <div class="p-6 space-y-8">
+    <div class="space-y-8">
       <h1 class="text-2xl font-bold">Meeting Bots</h1>
 
-      <div class="card bg-base-100 shadow-sm">
+      <div class="card bg-base-100 border border-base-300 shadow-sm">
         <div class="card-body">
-          <h2 class="card-title">Dispatch a bot</h2>
+          <h2 class="card-title">
+            <.icon name="hero-user-plus" class="size-5 text-primary" /> Dispatch a bot
+          </h2>
           <form
             id="bot-dispatch-form"
             data-test="bot-dispatch-form"
@@ -57,35 +59,42 @@ defmodule EarWitnessWeb.BotLive do
                 class="input input-bordered"
               />
             </label>
-            <button type="submit" class="btn btn-primary self-start">Send bot</button>
+            <button type="submit" class="btn btn-primary self-start">
+              <.icon name="hero-paper-airplane" class="size-4" /> Send bot
+            </button>
           </form>
         </div>
       </div>
 
-      <div class="card bg-base-100 shadow-sm">
+      <div class="card bg-base-100 border border-base-300 shadow-sm">
         <div class="card-body">
           <h2 class="card-title">Sessions</h2>
           <p :if={@bot_sessions == []} class="text-sm opacity-70">
             No bots dispatched yet.
           </p>
+          <%!--
+            Story 869 `_spex.exs` scans resolve a session's id from
+            `data-test="bot-session" data-session-id="..."` immediately
+            adjacent (no attribute may land between them).
+          --%>
           <div
             :for={session <- @bot_sessions}
             data-test="bot-session"
             data-session-id={session.id}
-            class="flex flex-wrap items-center gap-4 border-b border-base-200 py-2"
+            class="flex flex-wrap items-center gap-4 border-b border-base-200 py-2 last:border-b-0"
           >
-            <span class="font-mono text-sm">{session.meeting_url}</span>
-            <span data-test="bot-display-name" data-session-id={session.id}>
+            <span class="font-mono text-sm opacity-70">{session.meeting_url}</span>
+            <span data-test="bot-display-name" data-session-id={session.id} class="font-medium">
               {session.display_name}
             </span>
-            <span data-test="bot-status" data-session-id={session.id} class="badge">
+            <span data-test="bot-status" data-session-id={session.id} class={["badge", status_badge(session.status)]}>
               {session.status}
             </span>
             <span
               :if={session.status == :failed}
               data-test="bot-failure-reason"
               data-session-id={session.id}
-              class="text-error text-sm"
+              class="text-sm text-error"
             >
               {session.failure_reason}
             </span>
@@ -98,7 +107,7 @@ defmodule EarWitnessWeb.BotLive do
               phx-value-session_id={session.id}
               class="btn btn-sm btn-outline"
             >
-              Recall
+              <.icon name="hero-phone-x-mark" class="size-4" /> Recall
             </button>
           </div>
         </div>
@@ -106,6 +115,12 @@ defmodule EarWitnessWeb.BotLive do
     </div>
     """
   end
+
+  defp status_badge(:dispatched), do: "badge-info"
+  defp status_badge(:recording), do: "badge-error"
+  defp status_badge(:completed), do: "badge-success"
+  defp status_badge(:recalled), do: "badge-ghost"
+  defp status_badge(:failed), do: "badge-error"
 
   @impl true
   def handle_event("dispatch_bot", %{"bot" => params}, socket) do

@@ -29,11 +29,13 @@ defmodule EarWitnessWeb.SetupLive do
   @impl true
   def render(assigns) do
     ~H"""
-    <div class="p-6 space-y-6 max-w-2xl mx-auto">
-      <h1 class="text-2xl font-bold">Choose a transcription model</h1>
-      <p class="text-sm opacity-70">
-        Pick a model to get started — you can change this later in Settings.
-      </p>
+    <div class="mx-auto max-w-2xl space-y-6">
+      <div class="space-y-1">
+        <h1 class="text-2xl font-bold">Choose a transcription model</h1>
+        <p class="text-sm opacity-70">
+          Pick a model to get started — you can change this later in Settings.
+        </p>
+      </div>
 
       <div class="space-y-3">
         <div
@@ -43,8 +45,8 @@ defmodule EarWitnessWeb.SetupLive do
           phx-click="select_model"
           phx-value-model-id={model.id}
           class={[
-            "card bg-base-100 shadow-sm cursor-pointer border-2",
-            (model.id == @selected_model_id && "border-primary") || "border-transparent"
+            "card cursor-pointer border-2 bg-base-100 shadow-sm transition-colors",
+            (model.id == @selected_model_id && "border-primary") || "border-base-300"
           ]}
         >
           <div class="card-body">
@@ -62,14 +64,14 @@ defmodule EarWitnessWeb.SetupLive do
         Selected: <span class="font-mono">{@selected_model_id}</span>
       </div>
 
-      <div class="flex items-center gap-4">
+      <div class="flex flex-wrap items-center gap-4">
         <button
           :if={!@downloaded?}
           data-test="download-button"
           phx-click="start_download"
           class="btn btn-primary"
         >
-          Download and continue
+          <.icon name="hero-arrow-down-tray" class="size-4" /> Download and continue
         </button>
 
         <button
@@ -78,11 +80,11 @@ defmodule EarWitnessWeb.SetupLive do
           phx-click="retry_download"
           class="btn btn-outline"
         >
-          Retry download
+          <.icon name="hero-arrow-path" class="size-4" /> Retry download
         </button>
 
         <.link :if={@downloaded?} navigate={~p"/recordings"} class="btn btn-primary">
-          Continue
+          Continue <.icon name="hero-arrow-right" class="size-4" />
         </.link>
       </div>
 
@@ -94,7 +96,7 @@ defmodule EarWitnessWeb.SetupLive do
         />
       </div>
 
-      <div data-test="download-status" class="text-sm">
+      <div data-test="download-status" class="text-sm opacity-70">
         {status_text(@download_status, @recovered_from_error?)}
       </div>
     </div>

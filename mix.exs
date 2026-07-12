@@ -124,6 +124,13 @@ defmodule EarWitness.MixProject do
       # Assets
       {:esbuild, "~> 0.8", runtime: Mix.env() == :dev},
       {:tailwind, "~> 0.3", runtime: Mix.env() == :dev},
+      {:heroicons,
+       github: "tailwindlabs/heroicons",
+       tag: "v2.2.0",
+       sparse: "optimized",
+       app: false,
+       compile: false,
+       depth: 1},
 
       # Test
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},

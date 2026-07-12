@@ -1,7 +1,11 @@
 /priv/*.so*
 /priv/*.o*
 /priv/*.dylib*
-/priv/static/*
+# Generated CSS/JS bundle only — priv/static/fonts and priv/static/images
+# are committed source assets (self-hosted fonts, icons), same convention
+# as code_my_spec.
+/priv/static/assets/
+/priv/static/cache_manifest.json
 *.log
 *.zip
 *.gz
