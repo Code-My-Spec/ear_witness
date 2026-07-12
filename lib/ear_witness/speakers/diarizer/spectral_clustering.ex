@@ -1,27 +1,38 @@
 defmodule EarWitness.Speakers.Diarizer.SpectralClustering do
   @moduledoc """
   Clusters a small set of feature vectors — one per detected speaker
-  turn, its mean class-activation profile from the segmentation model —
-  into consistent speaker identities for the whole recording.
+  turn, its WeSpeaker voice embedding (see
+  `EarWitness.Speakers.Diarizer.Onnx`) — into consistent speaker
+  identities for the whole recording.
 
   Standard spectral clustering (Ng-Jordan-Weiss): cosine affinity matrix
-  -> symmetric normalized graph Laplacian -> eigendecomposition
-  (`Nx.LinAlg.eigh/1`) -> the number of clusters `k` chosen by the
-  eigengap heuristic (bounded to `1..3`, since the segmentation model
-  only ever identifies up to 3 concurrent local speakers) -> k-means
-  over the rows of the top-`k` eigenvectors.
+  -> row-wise sparsified (see `sparsify/1`) -> symmetric normalized
+  graph Laplacian -> eigendecomposition (`Nx.LinAlg.eigh/1`) -> the
+  number of clusters `k` chosen by the eigengap heuristic (bounded to
+  `1..3`, since the segmentation model only ever identifies up to 3
+  concurrent local speakers) -> k-means over the rows of the top-`k`
+  eigenvectors.
 
   This exists because the segmentation model's local "A/B/C" slot for a
   turn is only guaranteed consistent within the model's own effective
   context — for turns far apart in a longer recording, two turns both
-  locally labeled "A" are not guaranteed to be the same person. This
-  step re-groups turns by actual similarity instead of trusting the
-  model's raw local label. Scaled for the handful of turns one
-  recording produces — not a general large-N spectral clustering
-  implementation.
+  locally labeled "A" are not guaranteed to be the same person, and on
+  clean audio the model can reuse the same local slot for every turn
+  even when the underlying voices alternate. This step re-groups turns
+  by actual voice similarity instead of trusting the model's raw local
+  label. Scaled for the handful of turns one recording produces — not a
+  general large-N spectral clustering implementation.
   """
 
   @max_k 3
+
+  # Row-relative sparsification threshold for `sparsify/1` — see there
+  # for why. `0.7` was picked empirically (verified against a real
+  # two-speaker recording, `test/fixtures/diarize.raw`, and a clean
+  # alternating-solo-speaker recording): the whole `0.6..0.85` range
+  # produces identical, correct clustering on both, so this isn't a
+  # finely-tuned edge value.
+  @relative_threshold 0.7
 
   @doc """
   Returns one cluster index (`0`-based, contiguous) per input feature
@@ -34,7 +45,7 @@ defmodule EarWitness.Speakers.Diarizer.SpectralClustering do
 
   def cluster(feature_vectors) do
     x = Nx.tensor(feature_vectors)
-    affinity = cosine_affinity(x)
+    affinity = x |> cosine_affinity() |> sparsify()
     laplacian = normalized_laplacian(affinity)
     # `Nx.LinAlg.eigh/1` returns eigenvalues/-vectors sorted *descending*;
     # the eigengap heuristic below wants smallest-first (standard
@@ -53,6 +64,41 @@ defmodule EarWitness.Speakers.Diarizer.SpectralClustering do
     safe_norm = Nx.select(Nx.equal(norm, 0), Nx.tensor(1.0), norm)
     unit = Nx.divide(x, safe_norm)
     unit |> Nx.dot(Nx.transpose(unit)) |> Nx.max(0.0)
+  end
+
+  # Real voice embeddings, unlike the segmentation model's own
+  # class-activation profiles, rarely form a near-block-diagonal
+  # affinity matrix: even turns from two genuinely different speakers
+  # tend to share modest positive cosine similarity (channel, room
+  # acoustics, and the embedding model's own imperfections all add
+  # baseline similarity), so a fully-connected graph's normalized cut
+  # between real speakers is often not small enough for the eigengap
+  # heuristic to notice — every row stays meaningfully connected to
+  # every other row, masking real cluster structure.
+  #
+  # Dropping each row's edges that are weak *relative to that row's own
+  # strongest connection* (a standard spectral-clustering affinity
+  # refinement — see e.g. Wang et al. 2018's row-wise thresholding for
+  # speaker diarization) sharpens that structure: a turn's true
+  # same-speaker matches stay close to its best match, while
+  # cross-speaker matches fall well short of it, regardless of the
+  # recording's overall noise floor. A row-mean threshold was tried
+  # first and rejected — with as few as 3 turns from a single real
+  # speaker, dropping "below average" edges can sever a genuinely
+  # single cluster into two, since one of only two neighbors is always
+  # somewhat below the mean by construction. Thresholding relative to
+  # the row's *max* instead only drops edges that are meaningfully
+  # weaker than that row's best match, so a uniformly-similar
+  # single-speaker row stays fully connected. Symmetrized by keeping an
+  # edge if *either* endpoint considers it strong enough, so one noisy
+  # row can't unilaterally sever a real connection.
+  defp sparsify(affinity) do
+    {n, _n} = Nx.shape(affinity)
+    off_diagonal = Nx.subtract(affinity, Nx.multiply(Nx.eye(n), affinity))
+    row_max = Nx.reduce_max(off_diagonal, axes: [1], keep_axes: true)
+    threshold = Nx.multiply(row_max, @relative_threshold)
+    thresholded = Nx.select(Nx.greater_equal(off_diagonal, threshold), off_diagonal, 0.0)
+    Nx.max(thresholded, Nx.transpose(thresholded))
   end
 
   defp normalized_laplacian(affinity) do

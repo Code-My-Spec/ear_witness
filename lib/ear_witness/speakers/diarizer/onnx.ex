@@ -4,12 +4,24 @@ defmodule EarWitness.Speakers.Diarizer.Onnx do
   (VAD + local up-to-3-speaker segmentation, powerset encoded: 7
   classes — non-speech, A, B, C, A+B, A+C, B+C) run once over the whole
   recording, speaker turns recovered from its per-frame class
-  predictions, refined by spectral clustering
-  (`EarWitness.Speakers.Diarizer.SpectralClustering`) over each turn's
-  mean class-activation profile, and a WeSpeaker ResNet34 voice
-  embedding (`EarWitness.Speakers.Diarizer.Embedding`) extracted per
-  confident cluster for cross-recording matching (see
+  predictions, and each confident turn's own WeSpeaker ResNet34 voice
+  embedding (`EarWitness.Speakers.Diarizer.Embedding`) clustered
+  (`EarWitness.Speakers.Diarizer.SpectralClustering`) into consistent
+  speaker identities for the whole recording — the same embeddings then
+  double as the cross-recording matching signal (see
   `EarWitness.Speakers.resolve_speaker/1`).
+
+  Clustering runs on voice embeddings rather than the segmentation
+  model's per-turn class-activation profile, deliberately: the
+  segmentation model's local "A"/"B"/"C" speaker slot is only
+  guaranteed consistent within its own short effective context. On
+  clean audio — e.g. two people trading solo turns with a silence gap
+  between each — the model can (and does) reuse the same local slot for
+  every turn even though the voices alternate, so an activation-profile
+  feature is nearly identical across turns and collapses everyone into
+  one cluster. Voice embeddings don't have that failure mode: they're
+  extracted per turn from that turn's own audio and genuinely separate
+  distinct voices, both within a recording and across recordings.
 
   Whole-file single pass, not the sliding-window-plus-overlap-add
   aggregation pyannote's own pipeline uses for long recordings (see the
@@ -20,11 +32,12 @@ defmodule EarWitness.Speakers.Diarizer.Onnx do
   scope cut for now: the segmentation model's own recurrent state
   already threads consistently across a single forward pass, so a
   single pass is honest and correct for recordings up to a few minutes;
-  spectral clustering's job here is to catch the cases where the
-  model's local A/B/C slot gets reused for a different underlying voice
-  later in a longer clip, not to stitch windows back together. Very
-  long recordings are expected to need the sliding-window path as
-  follow-up work — see `.code_my_spec/architecture/decisions/speaker-diarization.md`.
+  spectral clustering's job here is to catch the cases where the same
+  underlying voice ends up split across different local A/B/C slots (or
+  a local slot gets reused for a different voice) later in a longer
+  clip, not to stitch windows back together. Very long recordings are
+  expected to need the sliding-window path as follow-up work — see
+  `.code_my_spec/architecture/decisions/speaker-diarization.md`.
 
   Overlapping speech, non-speech, and any single-speaker frame the model
   itself isn't confident about are surfaced as their own low-confidence
@@ -39,7 +52,6 @@ defmodule EarWitness.Speakers.Diarizer.Onnx do
   alias EarWitness.Speakers.Diarizer.{Embedding, Models, Pcm, SpectralClustering}
 
   @sample_rate 16_000
-  @num_classes 7
   @single_speaker_classes [1, 2, 3]
   @min_turn_ms 200
   @confidence_threshold 0.85
@@ -68,7 +80,7 @@ defmodule EarWitness.Speakers.Diarizer.Onnx do
       log_probs
       |> frame_runs()
       |> Enum.filter(&long_enough?(&1, ms_per_frame))
-      |> build_turns(log_probs, samples, ms_per_frame)
+      |> build_turns(samples, ms_per_frame)
     end
   end
 
@@ -106,58 +118,70 @@ defmodule EarWitness.Speakers.Diarizer.Onnx do
     (end_frame - start_frame) * ms_per_frame >= @min_turn_ms
   end
 
-  defp build_turns(runs, log_probs, samples, ms_per_frame) do
+  # Clusters confident runs by their own voice embedding (not the
+  # segmentation model's local class-activation profile — see the
+  # moduledoc for why): one WeSpeaker embedding is extracted per run,
+  # from that run's own audio span, and `SpectralClustering` groups runs
+  # whose voices are actually similar (its cosine affinity is exactly
+  # what voice embeddings want). A run whose audio is too short to
+  # embed (shouldn't happen given `@min_turn_ms`, but handled rather
+  # than assumed) falls back to its own low-confidence "Unknown" turn
+  # instead of being silently dropped from clustering.
+  #
+  # Each resulting turn carries its own run's embedding rather than one
+  # embedding shared across the whole cluster: `EarWitness.Speakers`
+  # already centroids every turn's embedding for a cluster before
+  # matching/creating a `Speaker`, so per-run embeddings are strictly
+  # more signal than a single cluster-level sample, at the cost of one
+  # extra ONNX embedding call per run (the embedding model itself stays
+  # loaded once via `EarWitness.Speakers.Diarizer.Models`).
+  defp build_turns(runs, samples, ms_per_frame) do
     {confident_runs, ambiguous_runs} = Enum.split_with(runs, &confident?/1)
 
-    cluster_ids =
+    {embeddable_runs, unembeddable_runs} =
       confident_runs
-      |> Enum.map(&mean_activation(&1, log_probs))
+      |> Enum.map(&{&1, run_embedding(&1, samples, ms_per_frame)})
+      |> Enum.split_with(fn {_run, embedding} -> not is_nil(embedding) end)
+
+    cluster_ids =
+      embeddable_runs
+      |> Enum.map(fn {_run, embedding} -> embedding end)
       |> SpectralClustering.cluster()
 
     confident_turns =
-      confident_runs
+      embeddable_runs
       |> Enum.zip(cluster_ids)
-      |> Enum.group_by(&elem(&1, 1), &elem(&1, 0))
-      |> Enum.flat_map(&turns_for_cluster(&1, samples, ms_per_frame))
-
-    ambiguous_turns =
-      Enum.map(ambiguous_runs, fn {_class, start_frame, end_frame, confidence} ->
-        turn(start_frame, end_frame, ms_per_frame, nil, confidence, nil)
+      |> Enum.map(fn {{run, embedding}, cluster_id} ->
+        confident_turn(run, ms_per_frame, cluster_id, embedding)
       end)
 
-    (confident_turns ++ ambiguous_turns) |> Enum.sort_by(& &1.start_ms)
+    fallback_turns =
+      Enum.map(unembeddable_runs, fn {run, _embedding} -> ambiguous_turn(run, ms_per_frame) end)
+
+    ambiguous_turns = Enum.map(ambiguous_runs, &ambiguous_turn(&1, ms_per_frame))
+
+    (confident_turns ++ fallback_turns ++ ambiguous_turns) |> Enum.sort_by(& &1.start_ms)
   end
 
-  defp turns_for_cluster({cluster_id, cluster_runs}, samples, ms_per_frame) do
-    embedding = cluster_embedding(cluster_runs, samples, ms_per_frame)
+  defp confident_turn(
+         {_class, start_frame, end_frame, confidence},
+         ms_per_frame,
+         cluster_id,
+         embedding
+       ) do
+    turn(start_frame, end_frame, ms_per_frame, cluster_id, confidence, embedding)
+  end
 
-    Enum.map(cluster_runs, fn {_class, start_frame, end_frame, confidence} ->
-      turn(start_frame, end_frame, ms_per_frame, cluster_id, confidence, embedding)
-    end)
+  defp ambiguous_turn({_class, start_frame, end_frame, confidence}, ms_per_frame) do
+    turn(start_frame, end_frame, ms_per_frame, nil, confidence, nil)
   end
 
   defp confident?({class, _start_frame, _end_frame, confidence}) do
     class in @single_speaker_classes and confidence >= @confidence_threshold
   end
 
-  defp mean_activation({_class, start_frame, end_frame, _confidence}, log_probs) do
-    log_probs
-    |> Nx.slice([start_frame, 0], [end_frame - start_frame, @num_classes])
-    |> Nx.exp()
-    |> Nx.mean(axes: [0])
-    |> Nx.to_flat_list()
-  end
-
-  # Extracts one voice embedding per cluster, from the audio underneath
-  # its single longest turn (long enough to be a reliable sample of the
-  # voice, and avoids diluting the embedding by stitching non-contiguous
-  # audio together).
-  defp cluster_embedding(cluster_runs, samples, ms_per_frame) do
-    {_class, start_frame, end_frame, _confidence} =
-      Enum.max_by(cluster_runs, fn {_class, start_frame, end_frame, _confidence} ->
-        end_frame - start_frame
-      end)
-
+  # Extracts a voice embedding from a single run's own audio span.
+  defp run_embedding({_class, start_frame, end_frame, _confidence}, samples, ms_per_frame) do
     total_samples = Nx.size(samples)
     start_sample = start_frame |> frame_to_sample(ms_per_frame) |> max(0) |> min(total_samples)
 

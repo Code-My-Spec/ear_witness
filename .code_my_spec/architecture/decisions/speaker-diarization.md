@@ -58,3 +58,22 @@ embedding model and clustering parameters before implementation.
   would fix it is the still-unfinished part of
   `EarWitness.Audio.SpeakerDiarizationSplitter`/`Windows` (a different,
   Membrane-streaming-pipeline concern from this post-hoc batch pass).
+- **Fix (QA issue d0d3bfa7, story 862 criterion 7339):** within-recording
+  clustering originally ran `SpectralClustering` over each confident
+  run's *mean segmentation-model class-activation profile*. On a clean
+  two-voice recording (alternating solo turns separated by silence) the
+  segmentation model reuses the same local A/B/C slot for every turn,
+  so that profile is nearly identical across turns regardless of who's
+  speaking, collapsing every speaker into one cluster — a real bug the
+  BDD cassette never caught because its source recording (a natural,
+  messier conversation) happened to already use different local slots
+  per speaker. Fixed by extracting a WeSpeaker embedding per confident
+  run (not once per cluster) and clustering on *those* instead — see
+  `EarWitness.Speakers.Diarizer.Onnx.build_turns/3`. Doing so also
+  exposed that real voice embeddings don't form as clean a
+  block-diagonal affinity matrix as activation profiles did (cross-
+  speaker cosine similarity isn't negligible), so
+  `SpectralClustering.sparsify/1` now drops each row's edges that are
+  weak relative to that row's own strongest match before building the
+  Laplacian — see that module's moduledoc for why a row-max-relative
+  threshold was used over a row-mean one.
