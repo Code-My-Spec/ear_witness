@@ -53,3 +53,21 @@ end
 if email = System.get_env("EARWITNESS_USER_EMAIL") do
   config :ear_witness, :widget_user_email, email
 end
+
+# Give each concurrent `mix test` OS process its OWN SQLite file, so separate
+# suite runs (several agents' stop hooks firing the suite at once) never
+# contend on SQLite's single-writer lock — the intermittent `Exqlite.Error:
+# Database busy` that `busy_timeout` and `max_cases: 1` only partly absorb.
+#
+# This must live in runtime.exs, not config/test.exs: a compile-time path is
+# baked into the shared `_build`, so two concurrent runs that skip
+# recompilation would reuse the same file and still collide. Evaluated at boot,
+# `System.pid()` is this run's OS process id — unique across concurrent runs.
+# Only `:database` is overridden; the pool/busy_timeout from config/test.exs
+# still apply. Files land in the OS temp dir (auto-reaped, no repo clutter).
+if config_env() == :test do
+  partition = System.get_env("MIX_TEST_PARTITION") || ""
+
+  config :ear_witness, EarWitness.Repo,
+    database: Path.join(System.tmp_dir!(), "ear_witness_test_#{partition}_#{System.pid()}.sq3")
+end
