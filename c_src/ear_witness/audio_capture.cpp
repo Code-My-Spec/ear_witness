@@ -29,6 +29,9 @@
 #include <erl_nif.h>
 
 #include <cctype>
+#include <condition_variable>
+#include <cstddef>
+#include <cstdint>
 #include <cstdio>
 #include <cstring>
 #include <mutex>
@@ -248,6 +251,105 @@ bool find_linux_monitor_device(ma_device_id *out_id) {
 }
 #endif
 
+// ---------------------------------------------------------------------------
+// Playback (play_wav/1) — plays one of our own 16kHz mono PCM16 WAVs out the
+// default OUTPUT device. Self-contained and additive: it shares nothing with
+// the capture path above except kSampleRate/kChannels, so it slots cleanly
+// alongside the mic + loopback capture backends (and the sibling macOS tap).
+// MA_NO_DECODING stays on — we parse the fixed 44-byte header ourselves rather
+// than pulling in miniaudio's decoders.
+// ---------------------------------------------------------------------------
+
+// Reads the PCM16 payload of one of our own 16kHz-mono WAVs into `out`. These
+// files are always written by write_wav above (or the Elixir DemoSignal
+// helper), so the header is a fixed 44-byte RIFF/WAVE: "RIFF"@0, "WAVE"@8,
+// "data"@36, 4-byte data size @40, samples @44. We still validate those tags
+// so a truncated/foreign file is rejected rather than played as noise.
+// Returns false (leaving out untouched) on any structural problem.
+bool read_wav_s16(const std::string &path, std::vector<ma_int16> *out) {
+  FILE *file = std::fopen(path.c_str(), "rb");
+  if (file == nullptr) {
+    return false;
+  }
+
+  unsigned char header[44];
+  if (std::fread(header, 1, sizeof(header), file) != sizeof(header)) {
+    std::fclose(file);
+    return false;
+  }
+
+  if (std::memcmp(header + 0, "RIFF", 4) != 0 || std::memcmp(header + 8, "WAVE", 4) != 0 ||
+      std::memcmp(header + 36, "data", 4) != 0) {
+    std::fclose(file);
+    return false;
+  }
+
+  uint32_t data_size = static_cast<uint32_t>(header[40]) | (static_cast<uint32_t>(header[41]) << 8) |
+                       (static_cast<uint32_t>(header[42]) << 16) |
+                       (static_cast<uint32_t>(header[43]) << 24);
+
+  size_t frame_count = data_size / sizeof(ma_int16);
+  out->resize(frame_count);
+  if (frame_count > 0) {
+    size_t read = std::fread(out->data(), sizeof(ma_int16), frame_count, file);
+    // Tolerate a data-size field that overshoots the bytes actually present
+    // (e.g. a capture killed mid-finalize) — play whatever really landed.
+    out->resize(read);
+  }
+
+  std::fclose(file);
+  return true;
+}
+
+// Drives one blocking playback to completion. Lives on the calling (dirty)
+// NIF thread's stack; the miniaudio audio thread reads `samples` and reports
+// progress back through `cursor`/`finished` under `mutex`.
+struct PlaybackState {
+  std::vector<ma_int16> samples;
+  size_t cursor = 0;
+  std::mutex mutex;
+  std::condition_variable cv;
+  bool finished = false;
+  // Number of all-silence buffers emitted after the last real sample. We wait
+  // for a few before signalling done so the device's own buffer has flushed
+  // the tail to the DAC — otherwise uninit could clip the final ~10-30ms,
+  // which matters for the closed-loop tap test that analyses the played tone.
+  int drain_buffers = 0;
+};
+
+constexpr int kDrainBuffers = 3;
+
+void playback_data_callback(ma_device *device, void *output, const void *input,
+                            ma_uint32 frame_count) {
+  (void)input;
+  auto *state = static_cast<PlaybackState *>(device->pUserData);
+  auto *out = static_cast<ma_int16 *>(output);
+  if (state == nullptr || out == nullptr || frame_count == 0) {
+    return;
+  }
+
+  std::lock_guard<std::mutex> lock(state->mutex);
+
+  size_t remaining = state->samples.size() - state->cursor;
+  ma_uint32 to_copy =
+      remaining < static_cast<size_t>(frame_count) ? static_cast<ma_uint32>(remaining) : frame_count;
+  if (to_copy > 0) {
+    std::memcpy(out, state->samples.data() + state->cursor,
+                static_cast<size_t>(to_copy) * sizeof(ma_int16));
+    state->cursor += to_copy;
+  }
+  if (to_copy < frame_count) {
+    std::memset(out + to_copy, 0, static_cast<size_t>(frame_count - to_copy) * sizeof(ma_int16));
+  }
+
+  if (state->cursor >= state->samples.size() && !state->finished) {
+    if (++state->drain_buffers >= kDrainBuffers) {
+      state->finished = true;
+      state->cv.notify_one();
+    }
+  }
+}
+
 }  // namespace
 
 static ERL_NIF_TERM nif_list_devices(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[]) {
@@ -426,6 +528,51 @@ static ERL_NIF_TERM nif_loopback_available(ErlNifEnv *env, int argc, const ERL_N
 #endif
 }
 
+// Plays a 16kHz mono PCM16 WAV out the default OUTPUT device and BLOCKS until
+// the whole file has been rendered. Registered as ERL_NIF_DIRTY_JOB_IO_BOUND
+// (see nif_funcs) so the blocking wait runs on a dirty scheduler and never
+// stalls a normal BEAM scheduler.
+static ERL_NIF_TERM nif_play_wav(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[]) {
+  (void)argc;
+
+  std::string path;
+  if (!get_path(env, argv[0], &path)) {
+    return enif_make_badarg(env);
+  }
+
+  PlaybackState state;
+  if (!read_wav_s16(path, &state.samples)) {
+    return make_error(env, "read_failed");
+  }
+
+  ma_device_config config = ma_device_config_init(ma_device_type_playback);
+  config.playback.format = ma_format_s16;
+  config.playback.channels = kChannels;
+  config.sampleRate = kSampleRate;
+  config.dataCallback = playback_data_callback;
+  config.pUserData = &state;
+
+  ma_device device;
+  if (ma_device_init(nullptr, &config, &device) != MA_SUCCESS) {
+    return make_error(env, "device_init_failed");
+  }
+
+  if (ma_device_start(&device) != MA_SUCCESS) {
+    ma_device_uninit(&device);
+    return make_error(env, "device_start_failed");
+  }
+
+  {
+    std::unique_lock<std::mutex> lock(state.mutex);
+    state.cv.wait(lock, [&state] { return state.finished; });
+  }
+
+  // uninit stops the audio thread and joins it, so no callback can touch
+  // `state` after this returns — safe to let the stack frame unwind.
+  ma_device_uninit(&device);
+  return enif_make_atom(env, "ok");
+}
+
 static int on_load(ErlNifEnv *env, void ** /*priv_data*/, ERL_NIF_TERM /*load_info*/) {
   auto flags = static_cast<ErlNifResourceFlags>(ERL_NIF_RT_CREATE | ERL_NIF_RT_TAKEOVER);
   g_capture_resource_type =
@@ -439,6 +586,9 @@ static ErlNifFunc nif_funcs[] = {
     {"start_loopback_capture", 1, nif_start_loopback_capture},
     {"stop_capture", 1, nif_stop_capture},
     {"loopback_available?", 0, nif_loopback_available},
+    // Dirty IO-bound: play_wav blocks on a condition variable until the whole
+    // file has rendered, so it must not run on a normal scheduler.
+    {"play_wav", 1, nif_play_wav, ERL_NIF_DIRTY_JOB_IO_BOUND},
 };
 
 ERL_NIF_INIT(Elixir.EarWitness.Audio.Miniaudio, nif_funcs, on_load, NULL, NULL, NULL)

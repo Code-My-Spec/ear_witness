@@ -83,4 +83,23 @@ defmodule EarWitness.Audio.Miniaudio do
   @doc "Whether system-output loopback capture is available on this machine."
   @spec loopback_available?() :: boolean()
   def loopback_available?, do: false
+
+  @doc """
+  Plays a 16kHz mono PCM16 WAV (one written by `stop_capture/1` or the
+  `EarWitness.Audio.DemoSignal` helper) out the default OUTPUT device,
+  blocking until the whole file has finished rendering. Returns `:ok`, or
+  `{:error, reason}` (`:read_failed`, `:device_init_failed`,
+  `:device_start_failed`) if the file can't be read or no output device opens.
+
+  Like `start_capture/2` and `stop_capture/1` — the other explicit-action
+  functions — the not-loaded stub RAISES `:nif_library_not_loaded` rather than
+  returning a concrete `{:error, _}`. Returning a concrete error here would
+  make the type checker infer that as `play_wav/1`'s sole return type and then
+  wrongly flag every `:ok` branch at the call sites as dead code (the same
+  reason documented in `load_nif/0`). Playback is only ever triggered by an
+  explicit user action (e.g. the audio demo task), never a passive render, so
+  raising on a missing NIF is fine.
+  """
+  @spec play_wav(Path.t()) :: :ok | {:error, atom()}
+  def play_wav(_path), do: :erlang.nif_error(:nif_library_not_loaded)
 end
