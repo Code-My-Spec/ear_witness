@@ -104,4 +104,14 @@ defmodule EarWitness.Audio.Miniaudio do
   """
   @spec play_wav(Path.t()) :: :ok | {:error, atom()}
   def play_wav(_path), do: :erlang.nif_error(:nif_library_not_loaded)
+
+  @doc """
+  Plays a 16-bit PCM WAV file to the first PLAYBACK device whose name contains
+  `device_name` (case-insensitive substring) — e.g. `"EarWitness Microphone"`,
+  the virtual microphone's output side. Returns `{:error, :device_not_found}`
+  when no playback device matches. This is the feed seam
+  `EarWitness.Audio.VirtualMic` and story 871 build on.
+  """
+  @spec play_wav_to_device(Path.t(), String.t()) :: :ok | {:error, atom()}
+  def play_wav_to_device(_path, _device_name), do: :erlang.nif_error(:nif_library_not_loaded)
 end

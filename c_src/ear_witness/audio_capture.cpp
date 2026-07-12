@@ -11,13 +11,12 @@
 //     "monitor" capture device — neither has been exercised on real
 //     Windows/Linux hardware in this change; CI on those platforms must
 //     validate before this path is trusted.
-//   - macOS system-output loopback IS implemented, but not in miniaudio
-//     (which has no macOS loopback backend — mackron/miniaudio#875). It lives
-//     in the sibling Core Audio process-tap module c_src/ear_witness/mac_tap.mm
-//     (see .code_my_spec/architecture/decisions/macos-system-audio-tap.md).
-//     On macOS 14.4+ loopback_available() returns true and
-//     start_loopback_capture/1 drives that tap through the ew_mac_tap_* C
-//     interface (mac_tap.h); older macOS honestly reports unavailable.
+//   - macOS system-output loopback is NOT implemented here — miniaudio has
+//     no macOS loopback backend (mackron/miniaudio#875). It is a separate
+//     native Core Audio process-tap module — see
+//     .code_my_spec/architecture/decisions/macos-system-audio-tap.md.
+//     loopback_available() and start_loopback_capture/1 both honestly
+//     report unavailable on macOS rather than faking it.
 
 #define MA_NO_DECODING
 #define MA_NO_ENCODING
@@ -27,21 +26,10 @@
 #define MINIAUDIO_IMPLEMENTATION
 #include "../miniaudio.h"
 
-#include "wav_writer.h"
-
-#ifdef __APPLE__
-// macOS system-output capture lives in mac_tap.mm (Core Audio process tap) —
-// miniaudio has no macOS loopback backend (mackron/miniaudio#875). The
-// loopback paths below call into it via this C interface.
-#include "mac_tap.h"
-#endif
-
 #include <erl_nif.h>
 
 #include <cctype>
 #include <condition_variable>
-#include <cstddef>
-#include <cstdint>
 #include <cstdio>
 #include <cstring>
 #include <mutex>
@@ -63,11 +51,6 @@ struct CaptureState {
   std::vector<ma_int16> samples;
   std::string path;
   bool device_initialized = false;
-  // Non-null when this capture is a macOS Core Audio process tap rather than a
-  // miniaudio device (see mac_tap.mm). The tap owns its own sample buffer,
-  // conversion, and WAV finalize; stop_capture/1 and the resource destructor
-  // route to it. Always null on non-Apple platforms and for mic capture.
-  void *mac_tap_handle = nullptr;
 };
 
 ErlNifResourceType *g_capture_resource_type = nullptr;
@@ -89,16 +72,6 @@ void data_callback(ma_device *device, void *output, const void *input, ma_uint32
 void capture_resource_dtor(ErlNifEnv *env, void *obj) {
   (void)env;
   auto *state = static_cast<CaptureState *>(obj);
-#ifdef __APPLE__
-  // A tap capture GC'd without an explicit stop must still tear down its Core
-  // Audio objects — a leaked private aggregate lingers in coreaudiod. Discard
-  // (no WAV) here, mirroring how the miniaudio branch below uninits without
-  // finalizing a file.
-  if (state->mac_tap_handle != nullptr) {
-    ew_mac_tap_free(state->mac_tap_handle);
-    state->mac_tap_handle = nullptr;
-  }
-#endif
   if (state->device_initialized) {
     ma_device_uninit(&state->device);
   }
@@ -132,9 +105,48 @@ bool get_path(ErlNifEnv *env, ERL_NIF_TERM term, std::string *out) {
   return true;
 }
 
-// PCM16 mono WAV finalize is shared with the macOS tap path — see
-// wav_writer.h (ear_witness::write_wav_s16). kSampleRate/kChannels above and
-// the writer's kWavSampleRate/kWavChannels are the same 16kHz mono contract.
+// Writes accumulated PCM16 mono samples as a RIFF/WAVE file — the exact
+// layout EarWitness.Recordings.WavHeader.parse/1 expects.
+bool write_wav(const std::string &path, const std::vector<ma_int16> &samples) {
+  FILE *file = std::fopen(path.c_str(), "wb");
+  if (file == nullptr) {
+    return false;
+  }
+
+  const ma_uint32 channels = kChannels;
+  const ma_uint32 bits_per_sample = 16;
+  const ma_uint32 block_align = channels * (bits_per_sample / 8);
+  const ma_uint32 byte_rate = kSampleRate * block_align;
+  const ma_uint32 data_size = static_cast<ma_uint32>(samples.size() * sizeof(ma_int16));
+  const ma_uint32 riff_size = 36 + data_size;
+  const ma_uint16 pcm_format = 1;
+
+  bool ok = true;
+  ok = ok && std::fwrite("RIFF", 1, 4, file) == 4;
+  ok = ok && std::fwrite(&riff_size, sizeof(riff_size), 1, file) == 1;
+  ok = ok && std::fwrite("WAVE", 1, 4, file) == 4;
+  ok = ok && std::fwrite("fmt ", 1, 4, file) == 4;
+  const ma_uint32 fmt_chunk_size = 16;
+  ok = ok && std::fwrite(&fmt_chunk_size, sizeof(fmt_chunk_size), 1, file) == 1;
+  ok = ok && std::fwrite(&pcm_format, sizeof(pcm_format), 1, file) == 1;
+  const ma_uint16 channels16 = static_cast<ma_uint16>(channels);
+  ok = ok && std::fwrite(&channels16, sizeof(channels16), 1, file) == 1;
+  ok = ok && std::fwrite(&kSampleRate, sizeof(kSampleRate), 1, file) == 1;
+  ok = ok && std::fwrite(&byte_rate, sizeof(byte_rate), 1, file) == 1;
+  const ma_uint16 block_align16 = static_cast<ma_uint16>(block_align);
+  ok = ok && std::fwrite(&block_align16, sizeof(block_align16), 1, file) == 1;
+  const ma_uint16 bits_per_sample16 = static_cast<ma_uint16>(bits_per_sample);
+  ok = ok && std::fwrite(&bits_per_sample16, sizeof(bits_per_sample16), 1, file) == 1;
+  ok = ok && std::fwrite("data", 1, 4, file) == 4;
+  ok = ok && std::fwrite(&data_size, sizeof(data_size), 1, file) == 1;
+
+  if (ok && data_size > 0) {
+    ok = std::fwrite(samples.data(), 1, data_size, file) == data_size;
+  }
+
+  std::fclose(file);
+  return ok;
+}
 
 // Enumerates devices via a fresh, short-lived context each call — simpler
 // and safer than keeping one alive for the NIF's lifetime, and cheap
@@ -238,102 +250,175 @@ bool find_linux_monitor_device(ma_device_id *out_id) {
 #endif
 
 // ---------------------------------------------------------------------------
-// Playback (play_wav/1) — plays one of our own 16kHz mono PCM16 WAVs out the
-// default OUTPUT device. Self-contained and additive: it shares nothing with
-// the capture path above except kSampleRate/kChannels, so it slots cleanly
-// alongside the mic + loopback capture backends (and the sibling macOS tap).
-// MA_NO_DECODING stays on — we parse the fixed 44-byte header ourselves rather
-// than pulling in miniaudio's decoders.
+// Playback (feed path) — plays a WAV file OUT to a device. Used to inject the
+// recording notice (story 871) into the "EarWitness Microphone" virtual device
+// so meeting apps (Zoom/Teams/Meet) that have selected it as their microphone
+// hear the notice on the user's outgoing voice channel. See
+// native/vmic-macos/README.md and EarWitness.Audio.VirtualMic.
 // ---------------------------------------------------------------------------
 
-// Reads the PCM16 payload of one of our own 16kHz-mono WAVs into `out`. These
-// files are always written by write_wav above (or the Elixir DemoSignal
-// helper), so the header is a fixed 44-byte RIFF/WAVE: "RIFF"@0, "WAVE"@8,
-// "data"@36, 4-byte data size @40, samples @44. We still validate those tags
-// so a truncated/foreign file is rejected rather than played as noise.
-// Returns false (leaving out untouched) on any structural problem.
-bool read_wav_s16(const std::string &path, std::vector<ma_int16> *out) {
-  FILE *file = std::fopen(path.c_str(), "rb");
-  if (file == nullptr) {
-    return false;
-  }
-
-  unsigned char header[44];
-  if (std::fread(header, 1, sizeof(header), file) != sizeof(header)) {
-    std::fclose(file);
-    return false;
-  }
-
-  if (std::memcmp(header + 0, "RIFF", 4) != 0 || std::memcmp(header + 8, "WAVE", 4) != 0 ||
-      std::memcmp(header + 36, "data", 4) != 0) {
-    std::fclose(file);
-    return false;
-  }
-
-  uint32_t data_size = static_cast<uint32_t>(header[40]) | (static_cast<uint32_t>(header[41]) << 8) |
-                       (static_cast<uint32_t>(header[42]) << 16) |
-                       (static_cast<uint32_t>(header[43]) << 24);
-
-  size_t frame_count = data_size / sizeof(ma_int16);
-  out->resize(frame_count);
-  if (frame_count > 0) {
-    size_t read = std::fread(out->data(), sizeof(ma_int16), frame_count, file);
-    // Tolerate a data-size field that overshoots the bytes actually present
-    // (e.g. a capture killed mid-finalize) — play whatever really landed.
-    out->resize(read);
-  }
-
-  std::fclose(file);
-  return true;
-}
-
-// Drives one blocking playback to completion. Lives on the calling (dirty)
-// NIF thread's stack; the miniaudio audio thread reads `samples` and reports
-// progress back through `cursor`/`finished` under `mutex`.
+// Holds the decoded PCM for one synchronous playback. Lives on the calling
+// thread's stack for the duration of play_to_device — the device is fully
+// uninitialized (which joins the audio thread) before the state goes out of
+// scope, so the audio callback can never outlive it.
 struct PlaybackState {
-  std::vector<ma_int16> samples;
-  size_t cursor = 0;
+  std::vector<ma_int16> samples;  // interleaved, in the WAV's own channel count
+  ma_uint32 channels = 1;
+  size_t cursor = 0;  // index into samples (advances channels-at-a-time per frame)
   std::mutex mutex;
   std::condition_variable cv;
   bool finished = false;
-  // Number of all-silence buffers emitted after the last real sample. We wait
-  // for a few before signalling done so the device's own buffer has flushed
-  // the tail to the DAC — otherwise uninit could clip the final ~10-30ms,
-  // which matters for the closed-loop tap test that analyses the played tone.
-  int drain_buffers = 0;
 };
-
-constexpr int kDrainBuffers = 3;
 
 void playback_data_callback(ma_device *device, void *output, const void *input,
                             ma_uint32 frame_count) {
   (void)input;
   auto *state = static_cast<PlaybackState *>(device->pUserData);
-  auto *out = static_cast<ma_int16 *>(output);
-  if (state == nullptr || out == nullptr || frame_count == 0) {
+  if (state == nullptr || output == nullptr) {
     return;
   }
 
+  auto *out = static_cast<ma_int16 *>(output);
+  const ma_uint32 channels = state->channels;
+  const size_t total = state->samples.size();
+
   std::lock_guard<std::mutex> lock(state->mutex);
-
-  size_t remaining = state->samples.size() - state->cursor;
-  ma_uint32 to_copy =
-      remaining < static_cast<size_t>(frame_count) ? static_cast<ma_uint32>(remaining) : frame_count;
-  if (to_copy > 0) {
-    std::memcpy(out, state->samples.data() + state->cursor,
-                static_cast<size_t>(to_copy) * sizeof(ma_int16));
-    state->cursor += to_copy;
+  ma_uint32 frames_written = 0;
+  for (; frames_written < frame_count && state->cursor + channels <= total; frames_written++) {
+    for (ma_uint32 c = 0; c < channels; c++) {
+      out[static_cast<size_t>(frames_written) * channels + c] = state->samples[state->cursor + c];
+    }
+    state->cursor += channels;
   }
-  if (to_copy < frame_count) {
-    std::memset(out + to_copy, 0, static_cast<size_t>(frame_count - to_copy) * sizeof(ma_int16));
+  // Zero-fill any remaining frames in this buffer (end of clip, or underrun).
+  for (size_t i = static_cast<size_t>(frames_written) * channels;
+       i < static_cast<size_t>(frame_count) * channels; i++) {
+    out[i] = 0;
   }
 
-  if (state->cursor >= state->samples.size() && !state->finished) {
-    if (++state->drain_buffers >= kDrainBuffers) {
-      state->finished = true;
-      state->cv.notify_one();
+  if (state->cursor + channels > total && !state->finished) {
+    state->finished = true;
+    state->cv.notify_all();
+  }
+}
+
+bool read_u16(FILE *file, ma_uint16 *out) { return std::fread(out, sizeof(*out), 1, file) == 1; }
+bool read_u32(FILE *file, ma_uint32 *out) { return std::fread(out, sizeof(*out), 1, file) == 1; }
+
+// Minimal RIFF/WAVE reader for 16-bit PCM (the only format EarWitness
+// produces — see write_wav above and WavHeader.parse/1). Fills *samples with
+// interleaved s16 and reports the source channel count / sample rate so the
+// playback device can be configured to match (miniaudio then converts to the
+// output device's native format). Returns false on any unsupported/malformed
+// file rather than guessing.
+bool read_wav(const std::string &path, std::vector<ma_int16> *samples, ma_uint32 *channels,
+              ma_uint32 *sample_rate) {
+  FILE *file = std::fopen(path.c_str(), "rb");
+  if (file == nullptr) {
+    return false;
+  }
+
+  char riff[4];
+  char wave[4];
+  ma_uint32 riff_size = 0;
+  bool ok = std::fread(riff, 1, 4, file) == 4 && read_u32(file, &riff_size) &&
+            std::fread(wave, 1, 4, file) == 4;
+  if (!ok || std::memcmp(riff, "RIFF", 4) != 0 || std::memcmp(wave, "WAVE", 4) != 0) {
+    std::fclose(file);
+    return false;
+  }
+
+  ma_uint16 audio_format = 0;
+  ma_uint16 num_channels = 0;
+  ma_uint16 bits_per_sample = 0;
+  ma_uint32 rate = 0;
+  bool have_fmt = false;
+  bool have_data = false;
+
+  while (true) {
+    char chunk_id[4];
+    ma_uint32 chunk_size = 0;
+    if (std::fread(chunk_id, 1, 4, file) != 4 || !read_u32(file, &chunk_size)) {
+      break;
+    }
+
+    if (std::memcmp(chunk_id, "fmt ", 4) == 0) {
+      ma_uint32 byte_rate = 0;
+      ma_uint16 block_align = 0;
+      ok = read_u16(file, &audio_format) && read_u16(file, &num_channels) && read_u32(file, &rate) &&
+           read_u32(file, &byte_rate) && read_u16(file, &block_align) &&
+           read_u16(file, &bits_per_sample);
+      if (!ok) {
+        break;
+      }
+      if (chunk_size > 16) {
+        std::fseek(file, static_cast<long>(chunk_size - 16), SEEK_CUR);
+      }
+      have_fmt = true;
+    } else if (std::memcmp(chunk_id, "data", 4) == 0) {
+      const size_t sample_count = chunk_size / sizeof(ma_int16);
+      samples->resize(sample_count);
+      have_data = sample_count == 0 ||
+                  std::fread(samples->data(), 1, chunk_size, file) == chunk_size;
+      break;
+    } else {
+      // Skip unknown chunk (RIFF chunks are padded to an even byte count).
+      std::fseek(file, static_cast<long>(chunk_size + (chunk_size & 1u)), SEEK_CUR);
     }
   }
+
+  std::fclose(file);
+  if (!have_fmt || !have_data || bits_per_sample != 16 || audio_format != 1 || num_channels == 0) {
+    return false;
+  }
+  *channels = num_channels;
+  *sample_rate = rate;
+  return true;
+}
+
+// Plays `path` synchronously to the playback device identified by `device_id`
+// (null = system default). Blocks (on a dirty IO scheduler — see nif_funcs)
+// until the whole clip has been pushed to the device, then tears the device
+// down. Returns :ok or {:error, reason}.
+ERL_NIF_TERM play_to_device(ErlNifEnv *env, const ma_device_id *device_id, const std::string &path) {
+  PlaybackState state;
+  ma_uint32 channels = 1;
+  ma_uint32 rate = kSampleRate;
+  if (!read_wav(path, &state.samples, &channels, &rate)) {
+    return make_error(env, "wav_read_failed");
+  }
+  state.channels = channels;
+
+  if (state.samples.empty()) {
+    return enif_make_atom(env, "ok");  // Nothing to play; treat as a no-op success.
+  }
+
+  ma_device_config config = ma_device_config_init(ma_device_type_playback);
+  config.playback.pDeviceID = device_id;
+  config.playback.format = ma_format_s16;
+  config.playback.channels = channels;
+  config.sampleRate = rate;
+  config.dataCallback = playback_data_callback;
+  config.pUserData = &state;
+
+  ma_device device;
+  if (ma_device_init(nullptr, &config, &device) != MA_SUCCESS) {
+    return make_error(env, "device_init_failed");
+  }
+  if (ma_device_start(&device) != MA_SUCCESS) {
+    ma_device_uninit(&device);
+    return make_error(env, "device_start_failed");
+  }
+
+  {
+    std::unique_lock<std::mutex> lock(state.mutex);
+    state.cv.wait(lock, [&state] { return state.finished; });
+  }
+
+  // ma_device_uninit stops and joins the audio thread synchronously, so no
+  // further callbacks touch `state` after this returns.
+  ma_device_uninit(&device);
+  return enif_make_atom(env, "ok");
 }
 
 }  // namespace
@@ -461,32 +546,11 @@ static ERL_NIF_TERM nif_start_loopback_capture(ErlNifEnv *env, int argc, const E
     return make_error(env, "source_unavailable");
   }
   return start_device(env, ma_device_type_capture, &monitor_id, path);
-#elif defined(__APPLE__)
-  // macOS: miniaudio has no loopback backend (mackron/miniaudio#875), so drive
-  // the native Core Audio process tap (mac_tap.mm). It accumulates converted
-  // 16kHz-mono-s16 samples and finalizes the WAV on stop, exactly like the mic
-  // path — so we only need to hold its opaque handle in a CaptureState the
-  // Elixir side can hand back to stop_capture/1. A null handle means the tap
-  // couldn't start (below the 14.4 floor, or the TCC AudioCapture permission
-  // was denied).
-  {
-    void *tap = ew_mac_tap_start(path.c_str());
-    if (tap == nullptr) {
-      return make_error(env, "source_unavailable");
-    }
-
-    void *resource_mem = enif_alloc_resource(g_capture_resource_type, sizeof(CaptureState));
-    auto *state = new (resource_mem) CaptureState();
-    state->path = path;
-    state->mac_tap_handle = tap;
-
-    ERL_NIF_TERM resource_term = enif_make_resource(env, resource_mem);
-    enif_release_resource(resource_mem);
-    return make_ok(env, resource_term);
-  }
 #else
-  // Any other platform: no system-output capture backend. Report honestly
-  // rather than faking it.
+  // macOS (and any other platform): miniaudio has no loopback backend here
+  // (mackron/miniaudio#875) — system-output capture needs the separate
+  // Core Audio process-tap module described in the
+  // macos-system-audio-tap ADR. Report honestly rather than faking it.
   (void)path;
   return make_error(env, "source_unavailable");
 #endif
@@ -500,21 +564,6 @@ static ERL_NIF_TERM nif_stop_capture(ErlNifEnv *env, int argc, const ERL_NIF_TER
     return enif_make_badarg(env);
   }
 
-#ifdef __APPLE__
-  // macOS tap capture: hand off to the native tap, which stops the device,
-  // converts + writes the shared 16kHz mono WAV, and tears down its Core Audio
-  // objects. Same Elixir surface as the mic path — stop_capture/1 works for
-  // both.
-  if (state->mac_tap_handle != nullptr) {
-    int rc = ew_mac_tap_stop(state->mac_tap_handle);
-    state->mac_tap_handle = nullptr;
-    if (rc != 0) {
-      return make_error(env, "write_failed");
-    }
-    return enif_make_atom(env, "ok");
-  }
-#endif
-
   if (!state->device_initialized) {
     return make_error(env, "already_stopped");
   }
@@ -525,12 +574,58 @@ static ERL_NIF_TERM nif_stop_capture(ErlNifEnv *env, int argc, const ERL_NIF_TER
   ma_device_uninit(&state->device);
   state->device_initialized = false;
 
-  bool wrote = ear_witness::write_wav_s16(state->path, state->samples);
+  bool wrote = write_wav(state->path, state->samples);
   if (!wrote) {
     return make_error(env, "write_failed");
   }
 
   return enif_make_atom(env, "ok");
+}
+
+// Plays a WAV file to the system default playback device.
+static ERL_NIF_TERM nif_play_wav(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[]) {
+  (void)argc;
+  std::string path;
+  if (!get_path(env, argv[0], &path)) {
+    return enif_make_badarg(env);
+  }
+  return play_to_device(env, nullptr, path);
+}
+
+// Plays a WAV file to the first PLAYBACK device whose name contains
+// `device_name` (case-insensitive substring) — e.g. "EarWitness Microphone",
+// the virtual device's output side. Returns {:error, :device_not_found} when
+// no playback device matches. This is the seam story 871 uses to inject the
+// recording notice into the outgoing voice channel.
+static ERL_NIF_TERM nif_play_wav_to_device(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[]) {
+  (void)argc;
+  std::string path;
+  std::string device_name;
+  if (!get_path(env, argv[0], &path) || !get_path(env, argv[1], &device_name)) {
+    return enif_make_badarg(env);
+  }
+
+  DeviceLister lister;
+  if (!lister.initialized) {
+    return make_error(env, "device_init_failed");
+  }
+
+  ma_device_info *capture_infos = nullptr;
+  ma_uint32 capture_count = 0;
+  ma_device_info *playback_infos = nullptr;
+  ma_uint32 playback_count = 0;
+  if (ma_context_get_devices(&lister.context, &playback_infos, &playback_count, &capture_infos,
+                              &capture_count) != MA_SUCCESS) {
+    return make_error(env, "device_init_failed");
+  }
+
+  for (ma_uint32 i = 0; i < playback_count; i++) {
+    if (contains_ci(playback_infos[i].name, device_name.c_str())) {
+      ma_device_id device_id = playback_infos[i].id;
+      return play_to_device(env, &device_id, path);
+    }
+  }
+  return make_error(env, "device_not_found");
 }
 
 static ERL_NIF_TERM nif_loopback_available(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[]) {
@@ -545,58 +640,9 @@ static ERL_NIF_TERM nif_loopback_available(ErlNifEnv *env, int argc, const ERL_N
   ma_device_id unused_id;
   bool available = find_linux_monitor_device(&unused_id);
   return enif_make_atom(env, available ? "true" : "false");
-#elif defined(__APPLE__)
-  // Core Audio process taps are available on macOS 14.4+ (runtime-checked in
-  // mac_tap.mm via @available) — true there, false on older macOS.
-  return enif_make_atom(env, ew_mac_tap_available() ? "true" : "false");
 #else
   return enif_make_atom(env, "false");
 #endif
-}
-
-// Plays a 16kHz mono PCM16 WAV out the default OUTPUT device and BLOCKS until
-// the whole file has been rendered. Registered as ERL_NIF_DIRTY_JOB_IO_BOUND
-// (see nif_funcs) so the blocking wait runs on a dirty scheduler and never
-// stalls a normal BEAM scheduler.
-static ERL_NIF_TERM nif_play_wav(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[]) {
-  (void)argc;
-
-  std::string path;
-  if (!get_path(env, argv[0], &path)) {
-    return enif_make_badarg(env);
-  }
-
-  PlaybackState state;
-  if (!read_wav_s16(path, &state.samples)) {
-    return make_error(env, "read_failed");
-  }
-
-  ma_device_config config = ma_device_config_init(ma_device_type_playback);
-  config.playback.format = ma_format_s16;
-  config.playback.channels = kChannels;
-  config.sampleRate = kSampleRate;
-  config.dataCallback = playback_data_callback;
-  config.pUserData = &state;
-
-  ma_device device;
-  if (ma_device_init(nullptr, &config, &device) != MA_SUCCESS) {
-    return make_error(env, "device_init_failed");
-  }
-
-  if (ma_device_start(&device) != MA_SUCCESS) {
-    ma_device_uninit(&device);
-    return make_error(env, "device_start_failed");
-  }
-
-  {
-    std::unique_lock<std::mutex> lock(state.mutex);
-    state.cv.wait(lock, [&state] { return state.finished; });
-  }
-
-  // uninit stops the audio thread and joins it, so no callback can touch
-  // `state` after this returns — safe to let the stack frame unwind.
-  ma_device_uninit(&device);
-  return enif_make_atom(env, "ok");
 }
 
 static int on_load(ErlNifEnv *env, void ** /*priv_data*/, ERL_NIF_TERM /*load_info*/) {
@@ -612,9 +658,10 @@ static ErlNifFunc nif_funcs[] = {
     {"start_loopback_capture", 1, nif_start_loopback_capture},
     {"stop_capture", 1, nif_stop_capture},
     {"loopback_available?", 0, nif_loopback_available},
-    // Dirty IO-bound: play_wav blocks on a condition variable until the whole
-    // file has rendered, so it must not run on a normal scheduler.
+    // Playback blocks for the length of the clip, so it runs on a dirty IO
+    // scheduler to avoid stalling a normal BEAM scheduler thread.
     {"play_wav", 1, nif_play_wav, ERL_NIF_DIRTY_JOB_IO_BOUND},
+    {"play_wav_to_device", 2, nif_play_wav_to_device, ERL_NIF_DIRTY_JOB_IO_BOUND},
 };
 
 ERL_NIF_INIT(Elixir.EarWitness.Audio.Miniaudio, nif_funcs, on_load, NULL, NULL, NULL)

@@ -76,3 +76,7 @@ npm-debug.log
 /deps
 /models
 /c_src/ear_witness/whisper.cpp
+
+# Virtual-mic driver build output + vendored BlackHole clone (build.sh regenerates)
+/native/vmic-macos/build/
+/native/vmic-macos/vendor/
