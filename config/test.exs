@@ -22,7 +22,14 @@ config :ear_witness, EarWitnessWeb.Endpoint,
 # this project's specs don't use).
 config :ear_witness, EarWitness.Repo,
   database: ".config/test/database#{System.get_env("MIX_TEST_PARTITION")}.sq3",
-  pool: Ecto.Adapters.SQL.Sandbox
+  pool: Ecto.Adapters.SQL.Sandbox,
+  # Multiple concurrent `mix test` invocations (several agents' stop hooks
+  # firing the suite at once against this shared DB file) collide on
+  # SQLite's single-writer lock. `max_cases: 1` serializes within one run;
+  # busy_timeout makes a locked connection WAIT up to 30s for the lock
+  # instead of raising `Database busy` immediately — absorbing the
+  # cross-invocation contention too.
+  busy_timeout: 30_000
 
 config :ear_witness, Oban, testing: :inline
 
