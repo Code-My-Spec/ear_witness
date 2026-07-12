@@ -84,6 +84,7 @@ defmodule EarWitnessWeb.TranscriptLive.Editor do
             data-segment-id={segment.id}
             phx-submit="edit_segment_text"
             phx-value-id={segment.id}
+            onclick="event.stopPropagation()"
             class="flex items-center gap-2"
           >
             <input
@@ -101,6 +102,7 @@ defmodule EarWitnessWeb.TranscriptLive.Editor do
             data-segment-id={segment.id}
             phx-change="reassign_segment_speaker"
             phx-value-id={segment.id}
+            onclick="event.stopPropagation()"
           >
             <select name="segment[speaker_id]" class="select select-bordered select-sm">
               <option

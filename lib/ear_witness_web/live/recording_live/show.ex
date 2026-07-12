@@ -119,7 +119,17 @@ defmodule EarWitnessWeb.RecordingLive.Show do
 
       <div class="card bg-base-100 border border-base-300 shadow-sm">
         <div class="card-body">
-          <h2 class="card-title">Transcript</h2>
+          <div class="flex flex-wrap items-center justify-between gap-2">
+            <h2 class="card-title">Transcript</h2>
+            <.link
+              :if={@transcript && @transcript.status == :completed}
+              navigate={~p"/recordings/#{@recording.id}/transcript"}
+              data-test="open-editor-link"
+              class="btn btn-sm btn-outline"
+            >
+              <.icon name="hero-pencil-square" class="size-4" /> Open editor
+            </.link>
+          </div>
           <button
             :if={is_nil(@transcript) || @transcript.status == :failed}
             type="button"
