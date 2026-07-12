@@ -6,9 +6,9 @@ Built with Elixir and LiveView by [Code My Spec](https://codemyspec.com/).
 
 ## How it works
 
-EarWitness runs as a native desktop app ([elixir-desktop](https://github.com/elixir-desktop/desktop)) with a [Membrane](https://membrane.stream/) audio pipeline behind it:
+EarWitness runs as a native desktop app ([elixir-desktop](https://github.com/elixir-desktop/desktop)) with a native capture pipeline behind it:
 
-1. **Capture** — PortAudio streams raw audio from any input device.
+1. **Capture** — a [miniaudio](https://github.com/mackron/miniaudio) C NIF streams raw audio from any input device (and, on Windows/Linux, system-output loopback).
 2. **Voice activity detection** — [Silero VAD](https://github.com/snakers4/silero-vad) (ONNX, via [Ortex](https://github.com/elixir-nx/ortex)) splits the stream into utterances and drops silence.
 3. **Transcription** — a [whisper.cpp](https://github.com/ggml-org/whisper.cpp) NIF transcribes recordings locally.
 4. **Speaker change detection** *(in progress)* — the [pyannote segmentation-3.0](https://huggingface.co/pyannote/segmentation-3.0) model scores per-speaker activity over sliding windows; peak detection over the change scores marks speaker boundaries.
@@ -65,7 +65,7 @@ mix test
 
 | Path | What |
 |---|---|
-| `lib/ear_witness/audio/` | Membrane pipeline: PortAudio source, VAD splitter, speaker-diarization splitter, sliding `Windows` |
+| `lib/ear_witness/audio/` | Live capture: miniaudio NIF wrapper, capture pipeline, consent policy |
 | `lib/ear_witness/signals/` | Peak detection over speaker-change scores |
 | `lib/ear_witness/transcription/` | GenServer driving the whisper.cpp NIF |
 | `lib/ear_witness_web/` | Phoenix/LiveView UI shown in the desktop webview |

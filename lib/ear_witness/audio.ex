@@ -8,12 +8,12 @@ defmodule EarWitness.Audio do
   """
 
   import Ecto.Query
-  alias EarWitness.Audio.{ConsentPolicy, Pipeline, Settings, Tap}
+  alias EarWitness.Audio.{ConsentPolicy, Miniaudio, Pipeline, Settings, Tap}
   alias EarWitness.Repo
 
   @doc false
   # Legacy: still used by EarWitnessWeb.TodoLive's device pickers.
-  def list_devices, do: Membrane.PortAudio.list_devices()
+  def list_devices, do: Miniaudio.list_devices()
 
   @doc "Lists the capture sources available on this machine."
   @spec list_capture_sources() ::

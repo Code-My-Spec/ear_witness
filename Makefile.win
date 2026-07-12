@@ -3,11 +3,42 @@
 # The whisper.cpp transcription NIF is a gcc/CMake build that targets Unix
 # toolchains; building it on Windows (MSVC vs mingw, ERTS import libs) is a
 # separate effort, and transcription is already unavailable in releases until
-# the whisper model is bundled. So this is intentionally a no-op: the app and
-# installer build without the NIF, and EarWitness.Transcribe tolerates its
+# the whisper model is bundled. So that NIF stays a no-op here: the app and
+# installer build without it, and EarWitness.Transcribe tolerates its
 # absence. Real Windows transcription is tracked with the model work.
-all:
+#
+# The miniaudio capture NIF (c_src/ear_witness/audio_capture.cpp) is a much
+# smaller, dependency-free build by comparison — no CMake/ggml tree, just
+# the vendored c_src/miniaudio.h, which documents that Windows "should
+# compile cleanly on all popular compilers without the need to configure
+# any include paths nor link to any libraries." It also needs no ERTS
+# import library: erl_nif.h resolves every enif_* call on Windows through
+# a VM-supplied callback table (see ERL_NIF_INIT / WinDynNifCallbacks in
+# erl_nif.h) rather than ordinary DLL-import linking, which is the "ERTS
+# import libs" problem the whisper NIF punts on above. So this file does
+# attempt to build it below — see the miniaudio-capture ADR.
+#
+# UNVALIDATED: written without access to a Windows/MSVC toolchain — nobody
+# has compiled, linked, or run this on real Windows yet. Windows CI is
+# `workflow_dispatch`-only (see .github/workflows/windows-installer.yml)
+# specifically so this gets a real build-and-smoke-test before it's
+# trusted; do not switch that workflow to push/tags until it has.
+
+BUILDDIR = priv
+SOURCEDIR = c_src\ear_witness
+AUDIO_TARGET = $(BUILDDIR)\audio_capture_nif.dll
+AUDIO_OBJ = $(BUILDDIR)\audio_capture.obj
+
+all: $(AUDIO_TARGET)
 	@echo Skipping native whisper NIF on Windows (transcription unavailable in this build).
+
+$(AUDIO_TARGET): $(AUDIO_OBJ)
+	link /nologo /DLL /OUT:$(AUDIO_TARGET) $(AUDIO_OBJ)
+
+$(AUDIO_OBJ): $(SOURCEDIR)\audio_capture.cpp
+	if not exist $(BUILDDIR) mkdir $(BUILDDIR)
+	cl /nologo /EHsc /std:c++17 /I"$(ERTS_INCLUDE_DIR)" /c $(SOURCEDIR)\audio_capture.cpp /Fo$(AUDIO_OBJ)
 
 clean:
 	@echo Nothing to clean.
+	-del /Q $(AUDIO_OBJ) $(AUDIO_TARGET) 2>nul

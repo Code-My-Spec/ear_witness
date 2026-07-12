@@ -1,6 +1,6 @@
 # EarWitness.Audio.Pipeline
 
-Membrane pipeline that captures from the selected input device and writes raw audio to a recording file
+Captures from the selected input device (via the miniaudio capture NIF, `EarWitness.Audio.Miniaudio`) and writes a PCM16 WAV recording file
 
 ## Type
 

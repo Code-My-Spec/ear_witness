@@ -1,4 +1,12 @@
 defmodule EarWitness.Transcription.Server do
+  @moduledoc """
+  Legacy transcription queue behind `EarWitnessWeb.TodoLive` (the
+  `/legacy-todo` screen) — serializes one whisper.cpp NIF transcription at
+  a time over recordings dropped in `EarWitness.recordings_dir()`, writing
+  the result as a text file under the transcripts directory and deleting
+  the source recording once done.
+  """
+
   use GenServer
   require Logger
 
@@ -57,7 +65,8 @@ defmodule EarWitness.Transcription.Server do
 
     text_file_path =
       file_path
-      |> String.replace(".raw", ".txt")
+      |> Path.rootname()
+      |> Kernel.<>(".txt")
       |> String.replace("recordings", "transcripts")
 
     File.write!(text_file_path, text)
