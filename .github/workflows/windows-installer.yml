@@ -9,9 +9,10 @@ name: "Windows Installer"
 # - The whisper transcription NIF is skipped on Windows (no-op Makefile.win);
 #   transcription is unavailable until the model work lands, same as elsewhere.
 on:
-  push:
-    branches: ["master"]
-    tags: ["v*"]
+  # Parked (manual-only): the native audio stack (Membrane/shmex/portaudio) has
+  # no Windows support — shmex is POSIX-only. Re-enable push/tags once a
+  # browser/getUserMedia (:browser) capture source replaces backend PortAudio
+  # capture. The toolchain here (setup-beam OTP+wx, NSIS) is otherwise ready.
   workflow_dispatch:
 
 permissions:
