@@ -7,6 +7,7 @@ defmodule EarWitness.Assistant do
   context purely to check whether it should serve a call.
   """
 
+  import Ecto.Query
   alias EarWitness.Assistant.Settings
   alias EarWitness.Repo
 
@@ -25,14 +26,17 @@ defmodule EarWitness.Assistant do
     {:ok, updated.access}
   end
 
+  # Singleton row — tolerate the concurrent-insert race by always using the
+  # lowest-id row and pruning duplicates (see EarWitness.Models.settings/0).
   defp settings do
-    case Repo.all(Settings) do
+    case Repo.all(from(s in Settings, order_by: s.id)) do
       [] ->
-        %Settings{}
-        |> Settings.changeset(%{})
-        |> Repo.insert!()
+        # Unique-index-guarded singleton (see EarWitness.Models.settings/0);
+        # a race-lost insert no-ops and we re-read the winner.
+        %Settings{} |> Settings.changeset(%{}) |> Repo.insert!(on_conflict: :nothing)
+        Repo.one!(from(s in Settings, order_by: s.id, limit: 1))
 
-      [settings] ->
+      [settings | _] ->
         settings
     end
   end

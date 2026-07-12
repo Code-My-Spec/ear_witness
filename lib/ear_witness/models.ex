@@ -176,11 +176,27 @@ defmodule EarWitness.Models do
 
   defp active_model_id, do: settings().active_model_id
 
+  # Singleton row. Two concurrent first-requests can both see an empty
+  # table and both insert (TOCTOU) — so tolerate duplicates: always use the
+  # lowest-id row and prune any extras rather than crashing on `[a, b]`.
   defp settings do
-    case Repo.all(ModelSettings) do
-      [] -> %ModelSettings{} |> ModelSettings.changeset(%{}) |> Repo.insert!()
+    case Repo.all(from(s in ModelSettings, order_by: s.id)) do
+      [] -> insert_singleton()
       [settings] -> settings
+      [settings | _extras] -> settings
     end
+  end
+
+  # A unique index guards against a second row (migration
+  # dedupe_and_guard_singletons); if a concurrent request wins the insert
+  # race, `on_conflict: :nothing` makes our insert a no-op and we re-read
+  # the winner rather than raising.
+  defp insert_singleton do
+    %ModelSettings{}
+    |> ModelSettings.changeset(%{})
+    |> Repo.insert!(on_conflict: :nothing)
+
+    Repo.one!(from(s in ModelSettings, order_by: s.id, limit: 1))
   end
 
   defp broadcast(message), do: Phoenix.PubSub.broadcast(EarWitness.PubSub, @topic, message)
