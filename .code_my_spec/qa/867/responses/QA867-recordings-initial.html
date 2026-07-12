@@ -1,0 +1,742 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="csrf-token" content="Bw9fVjwyLykdYRshJxAqEx9eGWxfExF-0F8fVElKdWQTvuPcJ4hZfkp9">
+    <title data-suffix=" · EarWitness">EarWitness · EarWitness</title>
+    <link rel="icon" type="image/png" href="/images/icon.png">
+    <link rel="preload" as="font" type="font/woff2" href="/fonts/ibm-plex-sans-latin.woff2" crossorigin="anonymous">
+    <link phx-track-static rel="stylesheet" href="/assets/app.css">
+    <script defer phx-track-static type="text/javascript" src="/assets/app.js">
+    </script>
+    <script>
+      (() => {
+        const setTheme = (theme) => {
+          if (theme === "system") {
+            localStorage.removeItem("phx:theme");
+            document.documentElement.removeAttribute("data-theme");
+          } else {
+            localStorage.setItem("phx:theme", theme);
+            document.documentElement.setAttribute("data-theme", theme);
+          }
+        };
+        if (!document.documentElement.hasAttribute("data-theme")) {
+          setTheme(localStorage.getItem("phx:theme") || "system");
+        }
+        window.addEventListener("storage", (e) => e.key === "phx:theme" && setTheme(e.newValue || "system"));
+        window.addEventListener("phx:set-theme", ({ detail: { theme } }) => setTheme(theme));
+      })();
+    </script>
+  </head>
+  <body class="min-h-screen bg-base-100 text-base-content" data-os="macos">
+    <div id="phx-GMGTJUJzlRKOxDCm" data-phx-main data-phx-session="SFMyNTY.g2gDaAJhBnQAAAAIdwJpZG0AAAAUcGh4LUdNR1RKVUp6bFJLT3hEQ213B3Nlc3Npb250AAAAAHcEdmlld3coRWxpeGlyLkVhcldpdG5lc3NXZWIuUmVjb3JkaW5nTGl2ZS5JbmRleHcKcGFyZW50X3BpZHcDbmlsdwZyb3V0ZXJ3G0VsaXhpci5FYXJXaXRuZXNzV2ViLlJvdXRlcncJcm9vdF92aWV3dyhFbGl4aXIuRWFyV2l0bmVzc1dlYi5SZWNvcmRpbmdMaXZlLkluZGV4dwhyb290X3BpZHcDbmlsdxFsaXZlX3Nlc3Npb25fbmFtZXcHZGVmYXVsdG4GAIZy3FafAWIAAVGA.sVV-jucXiYsW9Ow35r8ZbNNxk6gkW5IGhMnJ0EUisq8" data-phx-static="SFMyNTY.g2gDaAJhBnQAAAADdwJpZG0AAAAUcGh4LUdNR1RKVUp6bFJLT3hEQ213BWZsYXNodAAAAAB3CmFzc2lnbl9uZXdqbgYAhnLcVp8BYgABUYA.NZjfwxwnWhW5mVpc9mR2xXFqM-WnZRcWs24hVRF5GIE"><div class="drawer lg:drawer-open min-h-screen">
+  <input id="app-drawer-toggle" type="checkbox" class="drawer-toggle">
+
+  <div class="drawer-content flex flex-col bg-base-100">
+    <header class="navbar bg-base-200 border-b border-base-300 gap-2">
+      <div class="flex-none lg:hidden">
+        <label for="app-drawer-toggle" class="btn btn-square btn-ghost" aria-label="Open navigation">
+          <span class="hero-bars-3 size-5"></span>
+        </label>
+      </div>
+      <div class="flex-1 px-2 lg:px-4">
+        <span class="font-semibold tracking-tight lg:hidden">EarWitness</span>
+      </div>
+      <div class="flex-none px-2">
+        <div class="card relative flex flex-row items-center border-2 border-base-300 bg-base-300 rounded-full">
+  <div class="absolute w-1/3 h-full rounded-full border-1 border-base-200 bg-base-100 brightness-200 left-0 [[data-theme=light]_&]:left-1/3 [[data-theme=dark]_&]:left-2/3 transition-[left]"></div>
+
+  <button phx-click="[[&quot;dispatch&quot;,{&quot;event&quot;:&quot;phx:set-theme&quot;,&quot;detail&quot;:{&quot;theme&quot;:&quot;system&quot;}}]]" class="flex p-2 cursor-pointer w-1/3" aria-label="Use system theme">
+    <span class="hero-computer-desktop-micro size-4 opacity-75 hover:opacity-100"></span>
+  </button>
+
+  <button phx-click="[[&quot;dispatch&quot;,{&quot;event&quot;:&quot;phx:set-theme&quot;,&quot;detail&quot;:{&quot;theme&quot;:&quot;light&quot;}}]]" class="flex p-2 cursor-pointer w-1/3" aria-label="Use light theme">
+    <span class="hero-sun-micro size-4 opacity-75 hover:opacity-100"></span>
+  </button>
+
+  <button phx-click="[[&quot;dispatch&quot;,{&quot;event&quot;:&quot;phx:set-theme&quot;,&quot;detail&quot;:{&quot;theme&quot;:&quot;dark&quot;}}]]" class="flex p-2 cursor-pointer w-1/3" aria-label="Use dark theme">
+    <span class="hero-moon-micro size-4 opacity-75 hover:opacity-100"></span>
+  </button>
+</div>
+      </div>
+    </header>
+
+    <main class="flex-1 px-4 py-6 sm:px-6 lg:px-8">
+      <div class="mx-auto w-full max-w-4xl space-y-6">
+        <div class="space-y-8">
+  <div class="flex items-center justify-between">
+    <h1 class="text-2xl font-bold">Recordings</h1>
+    
+  </div>
+
+  <div class="space-y-8">
+    <div class="card bg-base-100 border border-base-300 shadow-sm">
+      <div class="card-body">
+        <h2 class="card-title">
+          <span class="hero-microphone size-5 text-primary"></span> Record
+        </h2>
+        
+        <div class="flex flex-wrap items-center gap-2">
+          
+          
+        </div>
+        
+        
+        <div class="flex gap-2">
+          <button type="button" class="btn btn-primary" phx-click="record">
+            <span class="hero-play size-4"></span> Record
+          </button>
+          <button type="button" class="btn" phx-click="stop" disabled>
+            <span class="hero-stop size-4"></span> Stop
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div class="card bg-base-100 border border-base-300 shadow-sm">
+      <div class="card-body">
+        <h2 class="card-title">
+          <span class="hero-arrow-up-tray size-5 text-primary"></span> Import a recording
+        </h2>
+        
+        <form id="import-form" data-test="import-form" phx-submit="import" phx-change="validate_import" class="flex flex-wrap items-center gap-2">
+          <input id="phx-GMGTJUJ_OQyOxChl" type="file" name="audio_file" accept=".wav" data-phx-hook="Phoenix.LiveFileUpload" data-phx-upload-ref="phx-GMGTJUJ_OQyOxChl" data-phx-active-refs="" data-phx-done-refs="" data-phx-preflighted-refs="" class="file-input file-input-bordered file-input-sm">
+          <button type="submit" class="btn btn-primary btn-sm">Import</button>
+        </form>
+      </div>
+    </div>
+
+    <div class="card bg-base-100 border border-base-300 shadow-sm">
+      <div class="card-body">
+        <h2 class="card-title">
+          <span class="hero-folder size-5 text-primary"></span> Cases
+        </h2>
+        <form id="collection-form" data-test="collection-form" phx-submit="create_collection" class="flex flex-wrap items-end gap-2">
+          <input type="text" name="collection[name]" placeholder="Case name" class="input input-bordered input-sm">
+          <input type="date" name="collection[date]" class="input input-bordered input-sm">
+          <input type="text" name="collection[participants]" placeholder="Participants" class="input input-bordered input-sm">
+          <button type="submit" class="btn btn-sm">Create case</button>
+        </form>
+
+        
+        
+        <div data-test="collection" data-collection-id="3" class="mt-4 space-y-2 border-t border-base-200 pt-4 font-medium first:mt-0 first:border-t-0 first:pt-0">
+          Membership Check Case
+          <div class="flex items-center justify-between font-normal">
+            <span class="text-xs opacity-60">
+              0 recording(s)
+            </span>
+            <button type="button" data-test="delete-collection-button" data-collection-id="3" phx-click="delete_collection" phx-value-id="3" class="btn btn-xs btn-ghost">
+              <span class="hero-x-mark size-3.5"></span> Delete case
+            </button>
+          </div>
+          <div class="space-y-1 pl-2">
+            
+          </div>
+        </div><div data-test="collection" data-collection-id="4" class="mt-4 space-y-2 border-t border-base-200 pt-4 font-medium first:mt-0 first:border-t-0 first:pt-0">
+          Second Check Case
+          <div class="flex items-center justify-between font-normal">
+            <span class="text-xs opacity-60">
+              1 recording(s)
+            </span>
+            <button type="button" data-test="delete-collection-button" data-collection-id="4" phx-click="delete_collection" phx-value-id="4" class="btn btn-xs btn-ghost">
+              <span class="hero-x-mark size-3.5"></span> Delete case
+            </button>
+          </div>
+          <div class="space-y-1 pl-2">
+            <div data-test="recording-row" data-recording-id="4" class="flex flex-wrap items-center gap-3 rounded-lg px-2 py-1.5 hover:bg-base-200">
+  <span class="hero-document-text size-4 shrink-0 opacity-60"></span>
+  <a href="/recordings/4" class="link link-hover flex-1 min-w-0 truncate">
+    747df973-1cf3-4275-b281-475d739ea1fb.wav
+  </a>
+  <span data-test="recording-duration" class="tnum badge badge-ghost badge-sm">
+    0:17
+  </span>
+  <span data-test="recording-source" class="badge badge-outline badge-sm">
+    captured
+  </span>
+</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div data-test="uncategorized-recordings" class="card bg-base-100 border border-base-300 shadow-sm">
+      <div class="card-body">
+        <h2 class="card-title">Uncategorized</h2>
+        
+        <div class="space-y-1">
+          <div data-test="recording-row" data-recording-id="45" class="flex flex-wrap items-center gap-3 rounded-lg px-2 py-1.5 hover:bg-base-200">
+  <span class="hero-document-text size-4 shrink-0 opacity-60"></span>
+  <a href="/recordings/45" class="link link-hover flex-1 min-w-0 truncate">
+    two-person-hearing-fred-samantha.wav
+  </a>
+  <span data-test="recording-duration" class="tnum badge badge-ghost badge-sm">
+    0:39
+  </span>
+  <span data-test="recording-source" class="badge badge-outline badge-sm">
+    imported
+  </span>
+</div><div data-test="recording-row" data-recording-id="44" class="flex flex-wrap items-center gap-3 rounded-lg px-2 py-1.5 hover:bg-base-200">
+  <span class="hero-document-text size-4 shrink-0 opacity-60"></span>
+  <a href="/recordings/44" class="link link-hover flex-1 min-w-0 truncate">
+    QA863-two-speaker.wav
+  </a>
+  <span data-test="recording-duration" class="tnum badge badge-ghost badge-sm">
+    0:15
+  </span>
+  <span data-test="recording-source" class="badge badge-outline badge-sm">
+    imported
+  </span>
+</div><div data-test="recording-row" data-recording-id="42" class="flex flex-wrap items-center gap-3 rounded-lg px-2 py-1.5 hover:bg-base-200">
+  <span class="hero-document-text size-4 shrink-0 opacity-60"></span>
+  <a href="/recordings/42" class="link link-hover flex-1 min-w-0 truncate">
+    QA862c-overlap.wav
+  </a>
+  <span data-test="recording-duration" class="tnum badge badge-ghost badge-sm">
+    0:19
+  </span>
+  <span data-test="recording-source" class="badge badge-outline badge-sm">
+    imported
+  </span>
+</div><div data-test="recording-row" data-recording-id="41" class="flex flex-wrap items-center gap-3 rounded-lg px-2 py-1.5 hover:bg-base-200">
+  <span class="hero-document-text size-4 shrink-0 opacity-60"></span>
+  <a href="/recordings/41" class="link link-hover flex-1 min-w-0 truncate">
+    QA862c-voiceA-4.wav
+  </a>
+  <span data-test="recording-duration" class="tnum badge badge-ghost badge-sm">
+    0:16
+  </span>
+  <span data-test="recording-source" class="badge badge-outline badge-sm">
+    imported
+  </span>
+</div><div data-test="recording-row" data-recording-id="40" class="flex flex-wrap items-center gap-3 rounded-lg px-2 py-1.5 hover:bg-base-200">
+  <span class="hero-document-text size-4 shrink-0 opacity-60"></span>
+  <a href="/recordings/40" class="link link-hover flex-1 min-w-0 truncate">
+    QA862c-voiceA-3.wav
+  </a>
+  <span data-test="recording-duration" class="tnum badge badge-ghost badge-sm">
+    0:12
+  </span>
+  <span data-test="recording-source" class="badge badge-outline badge-sm">
+    imported
+  </span>
+</div><div data-test="recording-row" data-recording-id="39" class="flex flex-wrap items-center gap-3 rounded-lg px-2 py-1.5 hover:bg-base-200">
+  <span class="hero-document-text size-4 shrink-0 opacity-60"></span>
+  <a href="/recordings/39" class="link link-hover flex-1 min-w-0 truncate">
+    QA862c-voiceA-2.wav
+  </a>
+  <span data-test="recording-duration" class="tnum badge badge-ghost badge-sm">
+    0:14
+  </span>
+  <span data-test="recording-source" class="badge badge-outline badge-sm">
+    imported
+  </span>
+</div><div data-test="recording-row" data-recording-id="38" class="flex flex-wrap items-center gap-3 rounded-lg px-2 py-1.5 hover:bg-base-200">
+  <span class="hero-document-text size-4 shrink-0 opacity-60"></span>
+  <a href="/recordings/38" class="link link-hover flex-1 min-w-0 truncate">
+    QA862c-voiceA-1.wav
+  </a>
+  <span data-test="recording-duration" class="tnum badge badge-ghost badge-sm">
+    0:16
+  </span>
+  <span data-test="recording-source" class="badge badge-outline badge-sm">
+    imported
+  </span>
+</div><div data-test="recording-row" data-recording-id="37" class="flex flex-wrap items-center gap-3 rounded-lg px-2 py-1.5 hover:bg-base-200">
+  <span class="hero-document-text size-4 shrink-0 opacity-60"></span>
+  <a href="/recordings/37" class="link link-hover flex-1 min-w-0 truncate">
+    QA862c-two-person.wav
+  </a>
+  <span data-test="recording-duration" class="tnum badge badge-ghost badge-sm">
+    0:39
+  </span>
+  <span data-test="recording-source" class="badge badge-outline badge-sm">
+    imported
+  </span>
+</div><div data-test="recording-row" data-recording-id="36" class="flex flex-wrap items-center gap-3 rounded-lg px-2 py-1.5 hover:bg-base-200">
+  <span class="hero-document-text size-4 shrink-0 opacity-60"></span>
+  <a href="/recordings/36" class="link link-hover flex-1 min-w-0 truncate">
+    overlap-hearing.wav
+  </a>
+  <span data-test="recording-duration" class="tnum badge badge-ghost badge-sm">
+    0:19
+  </span>
+  <span data-test="recording-source" class="badge badge-outline badge-sm">
+    imported
+  </span>
+</div><div data-test="recording-row" data-recording-id="35" class="flex flex-wrap items-center gap-3 rounded-lg px-2 py-1.5 hover:bg-base-200">
+  <span class="hero-document-text size-4 shrink-0 opacity-60"></span>
+  <a href="/recordings/35" class="link link-hover flex-1 min-w-0 truncate">
+    witness-recording-3.wav
+  </a>
+  <span data-test="recording-duration" class="tnum badge badge-ghost badge-sm">
+    0:14
+  </span>
+  <span data-test="recording-source" class="badge badge-outline badge-sm">
+    imported
+  </span>
+</div><div data-test="recording-row" data-recording-id="34" class="flex flex-wrap items-center gap-3 rounded-lg px-2 py-1.5 hover:bg-base-200">
+  <span class="hero-document-text size-4 shrink-0 opacity-60"></span>
+  <a href="/recordings/34" class="link link-hover flex-1 min-w-0 truncate">
+    witness-recording-2.wav
+  </a>
+  <span data-test="recording-duration" class="tnum badge badge-ghost badge-sm">
+    0:16
+  </span>
+  <span data-test="recording-source" class="badge badge-outline badge-sm">
+    imported
+  </span>
+</div><div data-test="recording-row" data-recording-id="33" class="flex flex-wrap items-center gap-3 rounded-lg px-2 py-1.5 hover:bg-base-200">
+  <span class="hero-document-text size-4 shrink-0 opacity-60"></span>
+  <a href="/recordings/33" class="link link-hover flex-1 min-w-0 truncate">
+    witness-recording-1.wav
+  </a>
+  <span data-test="recording-duration" class="tnum badge badge-ghost badge-sm">
+    0:20
+  </span>
+  <span data-test="recording-source" class="badge badge-outline badge-sm">
+    imported
+  </span>
+</div><div data-test="recording-row" data-recording-id="32" class="flex flex-wrap items-center gap-3 rounded-lg px-2 py-1.5 hover:bg-base-200">
+  <span class="hero-document-text size-4 shrink-0 opacity-60"></span>
+  <a href="/recordings/32" class="link link-hover flex-1 min-w-0 truncate">
+    two-person-hearing-fred-samantha.wav
+  </a>
+  <span data-test="recording-duration" class="tnum badge badge-ghost badge-sm">
+    0:39
+  </span>
+  <span data-test="recording-source" class="badge badge-outline badge-sm">
+    imported
+  </span>
+</div><div data-test="recording-row" data-recording-id="31" class="flex flex-wrap items-center gap-3 rounded-lg px-2 py-1.5 hover:bg-base-200">
+  <span class="hero-document-text size-4 shrink-0 opacity-60"></span>
+  <a href="/recordings/31" class="link link-hover flex-1 min-w-0 truncate">
+    two-person-hearing-samantha-fred.wav
+  </a>
+  <span data-test="recording-duration" class="tnum badge badge-ghost badge-sm">
+    0:39
+  </span>
+  <span data-test="recording-source" class="badge badge-outline badge-sm">
+    imported
+  </span>
+</div><div data-test="recording-row" data-recording-id="30" class="flex flex-wrap items-center gap-3 rounded-lg px-2 py-1.5 hover:bg-base-200">
+  <span class="hero-document-text size-4 shrink-0 opacity-60"></span>
+  <a href="/recordings/30" class="link link-hover flex-1 min-w-0 truncate">
+    two-speaker-minimal.wav
+  </a>
+  <span data-test="recording-duration" class="tnum badge badge-ghost badge-sm">
+    0:26
+  </span>
+  <span data-test="recording-source" class="badge badge-outline badge-sm">
+    imported
+  </span>
+</div><div data-test="recording-row" data-recording-id="29" class="flex flex-wrap items-center gap-3 rounded-lg px-2 py-1.5 hover:bg-base-200">
+  <span class="hero-document-text size-4 shrink-0 opacity-60"></span>
+  <a href="/recordings/29" class="link link-hover flex-1 min-w-0 truncate">
+    two-person-hearing-fred-samantha.wav
+  </a>
+  <span data-test="recording-duration" class="tnum badge badge-ghost badge-sm">
+    0:39
+  </span>
+  <span data-test="recording-source" class="badge badge-outline badge-sm">
+    imported
+  </span>
+</div><div data-test="recording-row" data-recording-id="28" class="flex flex-wrap items-center gap-3 rounded-lg px-2 py-1.5 hover:bg-base-200">
+  <span class="hero-document-text size-4 shrink-0 opacity-60"></span>
+  <a href="/recordings/28" class="link link-hover flex-1 min-w-0 truncate">
+    QA863-two-speaker.wav
+  </a>
+  <span data-test="recording-duration" class="tnum badge badge-ghost badge-sm">
+    0:15
+  </span>
+  <span data-test="recording-source" class="badge badge-outline badge-sm">
+    imported
+  </span>
+</div><div data-test="recording-row" data-recording-id="27" class="flex flex-wrap items-center gap-3 rounded-lg px-2 py-1.5 hover:bg-base-200">
+  <span class="hero-document-text size-4 shrink-0 opacity-60"></span>
+  <a href="/recordings/27" class="link link-hover flex-1 min-w-0 truncate">
+    QA863-single-v4.wav
+  </a>
+  <span data-test="recording-duration" class="tnum badge badge-ghost badge-sm">
+    0:13
+  </span>
+  <span data-test="recording-source" class="badge badge-outline badge-sm">
+    imported
+  </span>
+</div><div data-test="recording-row" data-recording-id="26" class="flex flex-wrap items-center gap-3 rounded-lg px-2 py-1.5 hover:bg-base-200">
+  <span class="hero-document-text size-4 shrink-0 opacity-60"></span>
+  <a href="/recordings/26" class="link link-hover flex-1 min-w-0 truncate">
+    QA863-single-v3.wav
+  </a>
+  <span data-test="recording-duration" class="tnum badge badge-ghost badge-sm">
+    0:11
+  </span>
+  <span data-test="recording-source" class="badge badge-outline badge-sm">
+    imported
+  </span>
+</div><div data-test="recording-row" data-recording-id="25" class="flex flex-wrap items-center gap-3 rounded-lg px-2 py-1.5 hover:bg-base-200">
+  <span class="hero-document-text size-4 shrink-0 opacity-60"></span>
+  <a href="/recordings/25" class="link link-hover flex-1 min-w-0 truncate">
+    QA863-single-v2.wav
+  </a>
+  <span data-test="recording-duration" class="tnum badge badge-ghost badge-sm">
+    0:13
+  </span>
+  <span data-test="recording-source" class="badge badge-outline badge-sm">
+    imported
+  </span>
+</div><div data-test="recording-row" data-recording-id="24" class="flex flex-wrap items-center gap-3 rounded-lg px-2 py-1.5 hover:bg-base-200">
+  <span class="hero-document-text size-4 shrink-0 opacity-60"></span>
+  <a href="/recordings/24" class="link link-hover flex-1 min-w-0 truncate">
+    QA863-single.wav
+  </a>
+  <span data-test="recording-duration" class="tnum badge badge-ghost badge-sm">
+    0:13
+  </span>
+  <span data-test="recording-source" class="badge badge-outline badge-sm">
+    imported
+  </span>
+</div><div data-test="recording-row" data-recording-id="23" class="flex flex-wrap items-center gap-3 rounded-lg px-2 py-1.5 hover:bg-base-200">
+  <span class="hero-document-text size-4 shrink-0 opacity-60"></span>
+  <a href="/recordings/23" class="link link-hover flex-1 min-w-0 truncate">
+    cross-talk-hearing-final.wav
+  </a>
+  <span data-test="recording-duration" class="tnum badge badge-ghost badge-sm">
+    0:17
+  </span>
+  <span data-test="recording-source" class="badge badge-outline badge-sm">
+    imported
+  </span>
+</div><div data-test="recording-row" data-recording-id="22" class="flex flex-wrap items-center gap-3 rounded-lg px-2 py-1.5 hover:bg-base-200">
+  <span class="hero-document-text size-4 shrink-0 opacity-60"></span>
+  <a href="/recordings/22" class="link link-hover flex-1 min-w-0 truncate">
+    alex_long3.wav
+  </a>
+  <span data-test="recording-duration" class="tnum badge badge-ghost badge-sm">
+    0:12
+  </span>
+  <span data-test="recording-source" class="badge badge-outline badge-sm">
+    imported
+  </span>
+</div><div data-test="recording-row" data-recording-id="21" class="flex flex-wrap items-center gap-3 rounded-lg px-2 py-1.5 hover:bg-base-200">
+  <span class="hero-document-text size-4 shrink-0 opacity-60"></span>
+  <a href="/recordings/21" class="link link-hover flex-1 min-w-0 truncate">
+    alex_long2.wav
+  </a>
+  <span data-test="recording-duration" class="tnum badge badge-ghost badge-sm">
+    0:14
+  </span>
+  <span data-test="recording-source" class="badge badge-outline badge-sm">
+    imported
+  </span>
+</div><div data-test="recording-row" data-recording-id="20" class="flex flex-wrap items-center gap-3 rounded-lg px-2 py-1.5 hover:bg-base-200">
+  <span class="hero-document-text size-4 shrink-0 opacity-60"></span>
+  <a href="/recordings/20" class="link link-hover flex-1 min-w-0 truncate">
+    alex_long1.wav
+  </a>
+  <span data-test="recording-duration" class="tnum badge badge-ghost badge-sm">
+    0:16
+  </span>
+  <span data-test="recording-source" class="badge badge-outline badge-sm">
+    imported
+  </span>
+</div><div data-test="recording-row" data-recording-id="19" class="flex flex-wrap items-center gap-3 rounded-lg px-2 py-1.5 hover:bg-base-200">
+  <span class="hero-document-text size-4 shrink-0 opacity-60"></span>
+  <a href="/recordings/19" class="link link-hover flex-1 min-w-0 truncate">
+    alex_solo3.wav
+  </a>
+  <span data-test="recording-duration" class="tnum badge badge-ghost badge-sm">
+    0:06
+  </span>
+  <span data-test="recording-source" class="badge badge-outline badge-sm">
+    imported
+  </span>
+</div><div data-test="recording-row" data-recording-id="18" class="flex flex-wrap items-center gap-3 rounded-lg px-2 py-1.5 hover:bg-base-200">
+  <span class="hero-document-text size-4 shrink-0 opacity-60"></span>
+  <a href="/recordings/18" class="link link-hover flex-1 min-w-0 truncate">
+    alex_solo2.wav
+  </a>
+  <span data-test="recording-duration" class="tnum badge badge-ghost badge-sm">
+    0:06
+  </span>
+  <span data-test="recording-source" class="badge badge-outline badge-sm">
+    imported
+  </span>
+</div><div data-test="recording-row" data-recording-id="17" class="flex flex-wrap items-center gap-3 rounded-lg px-2 py-1.5 hover:bg-base-200">
+  <span class="hero-document-text size-4 shrink-0 opacity-60"></span>
+  <a href="/recordings/17" class="link link-hover flex-1 min-w-0 truncate">
+    alex_solo1.wav
+  </a>
+  <span data-test="recording-duration" class="tnum badge badge-ghost badge-sm">
+    0:07
+  </span>
+  <span data-test="recording-source" class="badge badge-outline badge-sm">
+    imported
+  </span>
+</div><div data-test="recording-row" data-recording-id="16" class="flex flex-wrap items-center gap-3 rounded-lg px-2 py-1.5 hover:bg-base-200">
+  <span class="hero-document-text size-4 shrink-0 opacity-60"></span>
+  <a href="/recordings/16" class="link link-hover flex-1 min-w-0 truncate">
+    two-person-hearing-longpause.wav
+  </a>
+  <span data-test="recording-duration" class="tnum badge badge-ghost badge-sm">
+    0:38
+  </span>
+  <span data-test="recording-source" class="badge badge-outline badge-sm">
+    imported
+  </span>
+</div><div data-test="recording-row" data-recording-id="15" class="flex flex-wrap items-center gap-3 rounded-lg px-2 py-1.5 hover:bg-base-200">
+  <span class="hero-document-text size-4 shrink-0 opacity-60"></span>
+  <a href="/recordings/15" class="link link-hover flex-1 min-w-0 truncate">
+    two-person-hearing-paused.wav
+  </a>
+  <span data-test="recording-duration" class="tnum badge badge-ghost badge-sm">
+    0:29
+  </span>
+  <span data-test="recording-source" class="badge badge-outline badge-sm">
+    imported
+  </span>
+</div><div data-test="recording-row" data-recording-id="14" class="flex flex-wrap items-center gap-3 rounded-lg px-2 py-1.5 hover:bg-base-200">
+  <span class="hero-document-text size-4 shrink-0 opacity-60"></span>
+  <a href="/recordings/14" class="link link-hover flex-1 min-w-0 truncate">
+    two-person-hearing.wav
+  </a>
+  <span data-test="recording-duration" class="tnum badge badge-ghost badge-sm">
+    0:25
+  </span>
+  <span data-test="recording-source" class="badge badge-outline badge-sm">
+    imported
+  </span>
+</div><div data-test="recording-row" data-recording-id="13" class="flex flex-wrap items-center gap-3 rounded-lg px-2 py-1.5 hover:bg-base-200">
+  <span class="hero-document-text size-4 shrink-0 opacity-60"></span>
+  <a href="/recordings/13" class="link link-hover flex-1 min-w-0 truncate">
+    0eb7433c-ccf8-43fe-9467-3c8eb4b7fded.wav
+  </a>
+  <span data-test="recording-duration" class="tnum badge badge-ghost badge-sm">
+    0:12
+  </span>
+  <span data-test="recording-source" class="badge badge-outline badge-sm">
+    captured
+  </span>
+</div><div data-test="recording-row" data-recording-id="12" class="flex flex-wrap items-center gap-3 rounded-lg px-2 py-1.5 hover:bg-base-200">
+  <span class="hero-document-text size-4 shrink-0 opacity-60"></span>
+  <a href="/recordings/12" class="link link-hover flex-1 min-w-0 truncate">
+    a71bb7f8-1835-43a9-8e95-a47419da1185.wav
+  </a>
+  <span data-test="recording-duration" class="tnum badge badge-ghost badge-sm">
+    0:20
+  </span>
+  <span data-test="recording-source" class="badge badge-outline badge-sm">
+    captured
+  </span>
+</div><div data-test="recording-row" data-recording-id="11" class="flex flex-wrap items-center gap-3 rounded-lg px-2 py-1.5 hover:bg-base-200">
+  <span class="hero-document-text size-4 shrink-0 opacity-60"></span>
+  <a href="/recordings/11" class="link link-hover flex-1 min-w-0 truncate">
+    e5f047da-3158-4ba0-9ed7-233e983d90e4.wav
+  </a>
+  <span data-test="recording-duration" class="tnum badge badge-ghost badge-sm">
+    0:13
+  </span>
+  <span data-test="recording-source" class="badge badge-outline badge-sm">
+    captured
+  </span>
+</div><div data-test="recording-row" data-recording-id="10" class="flex flex-wrap items-center gap-3 rounded-lg px-2 py-1.5 hover:bg-base-200">
+  <span class="hero-document-text size-4 shrink-0 opacity-60"></span>
+  <a href="/recordings/10" class="link link-hover flex-1 min-w-0 truncate">
+    f1de7a65-0f1c-4398-991d-5e05fb863264.wav
+  </a>
+  <span data-test="recording-duration" class="tnum badge badge-ghost badge-sm">
+    0:13
+  </span>
+  <span data-test="recording-source" class="badge badge-outline badge-sm">
+    captured
+  </span>
+</div><div data-test="recording-row" data-recording-id="9" class="flex flex-wrap items-center gap-3 rounded-lg px-2 py-1.5 hover:bg-base-200">
+  <span class="hero-document-text size-4 shrink-0 opacity-60"></span>
+  <a href="/recordings/9" class="link link-hover flex-1 min-w-0 truncate">
+    2edafebf-4b3a-4204-8aca-6a1145fff75a.wav
+  </a>
+  <span data-test="recording-duration" class="tnum badge badge-ghost badge-sm">
+    0:23
+  </span>
+  <span data-test="recording-source" class="badge badge-outline badge-sm">
+    captured
+  </span>
+</div><div data-test="recording-row" data-recording-id="8" class="flex flex-wrap items-center gap-3 rounded-lg px-2 py-1.5 hover:bg-base-200">
+  <span class="hero-document-text size-4 shrink-0 opacity-60"></span>
+  <a href="/recordings/8" class="link link-hover flex-1 min-w-0 truncate">
+    a182a8cb-1b16-45a6-8b8a-18b4e6cfa34d.wav
+  </a>
+  <span data-test="recording-duration" class="tnum badge badge-ghost badge-sm">
+    0:20
+  </span>
+  <span data-test="recording-source" class="badge badge-outline badge-sm">
+    captured
+  </span>
+</div><div data-test="recording-row" data-recording-id="7" class="flex flex-wrap items-center gap-3 rounded-lg px-2 py-1.5 hover:bg-base-200">
+  <span class="hero-document-text size-4 shrink-0 opacity-60"></span>
+  <a href="/recordings/7" class="link link-hover flex-1 min-w-0 truncate">
+    QA860-run5-final.wav
+  </a>
+  <span data-test="recording-duration" class="tnum badge badge-ghost badge-sm">
+    0:06
+  </span>
+  <span data-test="recording-source" class="badge badge-outline badge-sm">
+    imported
+  </span>
+</div><div data-test="recording-row" data-recording-id="6" class="flex flex-wrap items-center gap-3 rounded-lg px-2 py-1.5 hover:bg-base-200">
+  <span class="hero-document-text size-4 shrink-0 opacity-60"></span>
+  <a href="/recordings/6" class="link link-hover flex-1 min-w-0 truncate">
+    QA860-run4-hearing.wav
+  </a>
+  <span data-test="recording-duration" class="tnum badge badge-ghost badge-sm">
+    0:06
+  </span>
+  <span data-test="recording-source" class="badge badge-outline badge-sm">
+    imported
+  </span>
+</div><div data-test="recording-row" data-recording-id="5" class="flex flex-wrap items-center gap-3 rounded-lg px-2 py-1.5 hover:bg-base-200">
+  <span class="hero-document-text size-4 shrink-0 opacity-60"></span>
+  <a href="/recordings/5" class="link link-hover flex-1 min-w-0 truncate">
+    1dc1d24b-4cdf-4848-a5fa-270299614e20.wav
+  </a>
+  <span data-test="recording-duration" class="tnum badge badge-ghost badge-sm">
+    0:22
+  </span>
+  <span data-test="recording-source" class="badge badge-outline badge-sm">
+    captured
+  </span>
+</div><div data-test="recording-row" data-recording-id="3" class="flex flex-wrap items-center gap-3 rounded-lg px-2 py-1.5 hover:bg-base-200">
+  <span class="hero-document-text size-4 shrink-0 opacity-60"></span>
+  <a href="/recordings/3" class="link link-hover flex-1 min-w-0 truncate">
+    LTB Hearing — 123 Main St
+  </a>
+  <span data-test="recording-duration" class="tnum badge badge-ghost badge-sm">
+    0:05
+  </span>
+  <span data-test="recording-source" class="badge badge-outline badge-sm">
+    imported
+  </span>
+</div><div data-test="recording-row" data-recording-id="2" class="flex flex-wrap items-center gap-3 rounded-lg px-2 py-1.5 hover:bg-base-200">
+  <span class="hero-document-text size-4 shrink-0 opacity-60"></span>
+  <a href="/recordings/2" class="link link-hover flex-1 min-w-0 truncate">
+    QA860-hearing2.wav
+  </a>
+  <span data-test="recording-duration" class="tnum badge badge-ghost badge-sm">
+    0:08
+  </span>
+  <span data-test="recording-source" class="badge badge-outline badge-sm">
+    imported
+  </span>
+</div><div data-test="recording-row" data-recording-id="1" class="flex flex-wrap items-center gap-3 rounded-lg px-2 py-1.5 hover:bg-base-200">
+  <span class="hero-document-text size-4 shrink-0 opacity-60"></span>
+  <a href="/recordings/1" class="link link-hover flex-1 min-w-0 truncate">
+    QA860-hearing.wav
+  </a>
+  <span data-test="recording-duration" class="tnum badge badge-ghost badge-sm">
+    0:01
+  </span>
+  <span data-test="recording-source" class="badge badge-outline badge-sm">
+    imported
+  </span>
+</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="flex justify-end">
+      <a href="/recordings/trash" data-phx-link="redirect" data-phx-link-state="push" class="link link-hover text-sm opacity-70">
+        <span class="hero-trash size-3.5"></span> View trash
+      </a>
+    </div>
+  </div>
+
+  
+</div>
+      </div>
+    </main>
+  </div>
+
+  <div class="drawer-side z-20">
+    <label for="app-drawer-toggle" aria-label="close navigation" class="drawer-overlay"></label>
+    <aside class="w-64 min-h-full bg-base-200 border-r border-base-300 flex flex-col">
+      <div class="p-6 border-b border-base-300">
+        <a href="/recordings" class="flex w-fit items-center gap-2">
+          <span class="inline-block h-2.5 w-2.5 rounded-full bg-primary"></span>
+          <span class="font-bold tracking-tight">EarWitness</span>
+        </a>
+      </div>
+      <ul class="menu p-4 text-base-content flex-1">
+        <li>
+          <a href="/recordings">
+            <span class="hero-microphone size-4"></span> Recordings
+          </a>
+        </li>
+        <li>
+          <a href="/search">
+            <span class="hero-magnifying-glass size-4"></span> Search
+          </a>
+        </li>
+        <li>
+          <a href="/bots">
+            <span class="hero-user-group size-4"></span> Bots
+          </a>
+        </li>
+        <li>
+          <a href="/settings">
+            <span class="hero-cog-6-tooth size-4"></span> Settings
+          </a>
+        </li>
+        <li>
+          <a href="/setup">
+            <span class="hero-sparkles size-4"></span> Setup
+          </a>
+        </li>
+      </ul>
+    </aside>
+  </div>
+</div>
+
+<div id="flash-group" aria-live="polite">
+  
+  
+
+  <div id="client-error" phx-click="[[&quot;push&quot;,{&quot;value&quot;:{&quot;key&quot;:&quot;error&quot;},&quot;event&quot;:&quot;lv:clear-flash&quot;}],[&quot;hide&quot;,{&quot;time&quot;:200,&quot;to&quot;:&quot;#client-error&quot;,&quot;transition&quot;:[[&quot;transition-all&quot;,&quot;ease-in&quot;,&quot;duration-200&quot;],[&quot;opacity-100&quot;,&quot;translate-y-0&quot;,&quot;sm:scale-100&quot;],[&quot;opacity-0&quot;,&quot;translate-y-4&quot;,&quot;sm:translate-y-0&quot;,&quot;sm:scale-95&quot;]]}]]" role="alert" class="toast toast-top toast-end z-50" hidden phx-connected="[[&quot;hide&quot;,{&quot;time&quot;:200,&quot;to&quot;:&quot;#client-error&quot;,&quot;transition&quot;:[[&quot;transition-all&quot;,&quot;ease-in&quot;,&quot;duration-200&quot;],[&quot;opacity-100&quot;,&quot;translate-y-0&quot;,&quot;sm:scale-100&quot;],[&quot;opacity-0&quot;,&quot;translate-y-4&quot;,&quot;sm:translate-y-0&quot;,&quot;sm:scale-95&quot;]]}],[&quot;set_attr&quot;,{&quot;attr&quot;:[&quot;hidden&quot;,&quot;&quot;]}]]" phx-disconnected="[[&quot;show&quot;,{&quot;time&quot;:300,&quot;to&quot;:&quot;.phx-client-error #client-error&quot;,&quot;transition&quot;:[[&quot;transition-all&quot;,&quot;ease-out&quot;,&quot;duration-300&quot;],[&quot;opacity-0&quot;,&quot;translate-y-4&quot;,&quot;sm:translate-y-0&quot;,&quot;sm:scale-95&quot;],[&quot;opacity-100&quot;,&quot;translate-y-0&quot;,&quot;sm:scale-100&quot;]]}],[&quot;remove_attr&quot;,{&quot;attr&quot;:&quot;hidden&quot;}]]">
+  <div class="alert w-80 sm:w-96 max-w-80 sm:max-w-96 text-wrap shadow-lg alert-error">
+    
+    <span class="hero-exclamation-circle size-5 shrink-0"></span>
+    <div>
+      <p class="font-semibold">We can&#39;t find the internet</p>
+      <p>
+    Attempting to reconnect
+    <span class="hero-arrow-path ml-1 size-3 motion-safe:animate-spin"></span>
+  </p>
+    </div>
+  </div>
+</div>
+
+  <div id="server-error" phx-click="[[&quot;push&quot;,{&quot;value&quot;:{&quot;key&quot;:&quot;error&quot;},&quot;event&quot;:&quot;lv:clear-flash&quot;}],[&quot;hide&quot;,{&quot;time&quot;:200,&quot;to&quot;:&quot;#server-error&quot;,&quot;transition&quot;:[[&quot;transition-all&quot;,&quot;ease-in&quot;,&quot;duration-200&quot;],[&quot;opacity-100&quot;,&quot;translate-y-0&quot;,&quot;sm:scale-100&quot;],[&quot;opacity-0&quot;,&quot;translate-y-4&quot;,&quot;sm:translate-y-0&quot;,&quot;sm:scale-95&quot;]]}]]" role="alert" class="toast toast-top toast-end z-50" hidden phx-connected="[[&quot;hide&quot;,{&quot;time&quot;:200,&quot;to&quot;:&quot;#server-error&quot;,&quot;transition&quot;:[[&quot;transition-all&quot;,&quot;ease-in&quot;,&quot;duration-200&quot;],[&quot;opacity-100&quot;,&quot;translate-y-0&quot;,&quot;sm:scale-100&quot;],[&quot;opacity-0&quot;,&quot;translate-y-4&quot;,&quot;sm:translate-y-0&quot;,&quot;sm:scale-95&quot;]]}],[&quot;set_attr&quot;,{&quot;attr&quot;:[&quot;hidden&quot;,&quot;&quot;]}]]" phx-disconnected="[[&quot;show&quot;,{&quot;time&quot;:300,&quot;to&quot;:&quot;.phx-server-error #server-error&quot;,&quot;transition&quot;:[[&quot;transition-all&quot;,&quot;ease-out&quot;,&quot;duration-300&quot;],[&quot;opacity-0&quot;,&quot;translate-y-4&quot;,&quot;sm:translate-y-0&quot;,&quot;sm:scale-95&quot;],[&quot;opacity-100&quot;,&quot;translate-y-0&quot;,&quot;sm:scale-100&quot;]]}],[&quot;remove_attr&quot;,{&quot;attr&quot;:&quot;hidden&quot;}]]">
+  <div class="alert w-80 sm:w-96 max-w-80 sm:max-w-96 text-wrap shadow-lg alert-error">
+    
+    <span class="hero-exclamation-circle size-5 shrink-0"></span>
+    <div>
+      <p class="font-semibold">Something went wrong!</p>
+      <p>
+    Attempting to reconnect
+    <span class="hero-arrow-path ml-1 size-3 motion-safe:animate-spin"></span>
+  </p>
+    </div>
+  </div>
+</div>
+</div></div>
+<div id="phx-GMGTJUKTR1KOxDDm" data-phx-session="SFMyNTY.g2gDaAJhBnQAAAAIdwJpZG0AAAAUcGh4LUdNR1RKVUtUUjFLT3hERG13B3Nlc3Npb250AAAAAHcEdmlld3cjRWxpeGlyLkVhcldpdG5lc3NXZWIuQ2hhdFdpZGdldExpdmV3CnBhcmVudF9waWR3A25pbHcGcm91dGVydwNuaWx3CXJvb3Rfdmlld3cjRWxpeGlyLkVhcldpdG5lc3NXZWIuQ2hhdFdpZGdldExpdmV3CHJvb3RfcGlkdwNuaWx3EWxpdmVfc2Vzc2lvbl9uYW1ldwdkZWZhdWx0bgYAh3LcVp8BYgABUYA.YEZRYROf0F6QmeutTR2NeFBkmf4Lt_apAmHFNMS_Jqs" data-phx-static="SFMyNTY.g2gDaAJhBnQAAAADdwJpZG0AAAAUcGh4LUdNR1RKVUtUUjFLT3hERG13BWZsYXNodAAAAAB3CmFzc2lnbl9uZXdqbgYAh3LcVp8BYgABUYA.BzM86PCh4QFCq6ztlByn5tdqYwNSHCT_lPjrCcO_l2g"><div id="codemyspec-chat-widget" phx-hook="EarWitnessWeb.ChatWidgetLive.CmsScreenshot" class="fixed bottom-4 right-4 z-50">
+  <button type="button" phx-click="toggle" data-test="widget-toggle" class="btn btn-primary btn-circle shadow-lg" aria-label="Support">
+    💬
+  </button>
+
+  
+</div></div>
+  <iframe hidden height="0" width="0" src="/phoenix/live_reload/frame"></iframe></body>
+</html>

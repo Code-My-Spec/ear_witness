@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="csrf-token" content="fgZSZD04DzgxBAwtBhYZLxxaJwF7GjckIO5TWOLZH2FXWsc_I0V7BbVc">
+    <title data-suffix=" · EarWitness">EarWitness · EarWitness</title>
+    <link rel="icon" type="image/png" href="/images/icon.png">
+    <link rel="preload" as="font" type="font/woff2" href="/fonts/ibm-plex-sans-latin.woff2" crossorigin="anonymous">
+    <link phx-track-static rel="stylesheet" href="/assets/app.css">
+    <script defer phx-track-static type="text/javascript" src="/assets/app.js">
+    </script>
+    <script>
+      (() => {
+        const setTheme = (theme) => {
+          if (theme === "system") {
+            localStorage.removeItem("phx:theme");
+            document.documentElement.removeAttribute("data-theme");
+          } else {
+            localStorage.setItem("phx:theme", theme);
+            document.documentElement.setAttribute("data-theme", theme);
+          }
+        };
+        if (!document.documentElement.hasAttribute("data-theme")) {
+          setTheme(localStorage.getItem("phx:theme") || "system");
+        }
+        window.addEventListener("storage", (e) => e.key === "phx:theme" && setTheme(e.newValue || "system"));
+        window.addEventListener("phx:set-theme", ({ detail: { theme } }) => setTheme(theme));
+      })();
+    </script>
+  </head>
+  <body class="min-h-screen bg-base-100 text-base-content" data-os="macos">
+    <div id="phx-GMGTIZUuEQKMmzkE" data-phx-main data-phx-session="SFMyNTY.g2gDaAJhBnQAAAAIdwJpZG0AAAAUcGh4LUdNR1RJWlV1RVFLTW16a0V3B3Nlc3Npb250AAAAAHcEdmlld3chRWxpeGlyLkVhcldpdG5lc3NXZWIuU2V0dGluZ3NMaXZldwpwYXJlbnRfcGlkdwNuaWx3BnJvdXRlcncbRWxpeGlyLkVhcldpdG5lc3NXZWIuUm91dGVydwlyb290X3ZpZXd3IUVsaXhpci5FYXJXaXRuZXNzV2ViLlNldHRpbmdzTGl2ZXcIcm9vdF9waWR3A25pbHcRbGl2ZV9zZXNzaW9uX25hbWV3B2RlZmF1bHRuBgDXNNxWnwFiAAFRgA.CJ6ATBuhI-hBJvifcV-2Q8p-Kx1qW4aKV_oSfjq-Dxg" data-phx-static="SFMyNTY.g2gDaAJhBnQAAAADdwJpZG0AAAAUcGh4LUdNR1RJWlV1RVFLTW16a0V3BWZsYXNodAAAAAB3CmFzc2lnbl9uZXdqbgYA1zTcVp8BYgABUYA.s6eeVUVoWB6PQKZrzDikFzsP644Ce0Q8-0RHIOsEbZY"><div class="drawer lg:drawer-open min-h-screen">
+  <input id="app-drawer-toggle" type="checkbox" class="drawer-toggle">
+
+  <div class="drawer-content flex flex-col bg-base-100">
+    <header class="navbar bg-base-200 border-b border-base-300 gap-2">
+      <div class="flex-none lg:hidden">
+        <label for="app-drawer-toggle" class="btn btn-square btn-ghost" aria-label="Open navigation">
+          <span class="hero-bars-3 size-5"></span>
+        </label>
+      </div>
+      <div class="flex-1 px-2 lg:px-4">
+        <span class="font-semibold tracking-tight lg:hidden">EarWitness</span>
+      </div>
+      <div class="flex-none px-2">
+        <div class="card relative flex flex-row items-center border-2 border-base-300 bg-base-300 rounded-full">
+  <div class="absolute w-1/3 h-full rounded-full border-1 border-base-200 bg-base-100 brightness-200 left-0 [[data-theme=light]_&]:left-1/3 [[data-theme=dark]_&]:left-2/3 transition-[left]"></div>
+
+  <button phx-click="[[&quot;dispatch&quot;,{&quot;event&quot;:&quot;phx:set-theme&quot;,&quot;detail&quot;:{&quot;theme&quot;:&quot;system&quot;}}]]" class="flex p-2 cursor-pointer w-1/3" aria-label="Use system theme">
+    <span class="hero-computer-desktop-micro size-4 opacity-75 hover:opacity-100"></span>
+  </button>
+
+  <button phx-click="[[&quot;dispatch&quot;,{&quot;event&quot;:&quot;phx:set-theme&quot;,&quot;detail&quot;:{&quot;theme&quot;:&quot;light&quot;}}]]" class="flex p-2 cursor-pointer w-1/3" aria-label="Use light theme">
+    <span class="hero-sun-micro size-4 opacity-75 hover:opacity-100"></span>
+  </button>
+
+  <button phx-click="[[&quot;dispatch&quot;,{&quot;event&quot;:&quot;phx:set-theme&quot;,&quot;detail&quot;:{&quot;theme&quot;:&quot;dark&quot;}}]]" class="flex p-2 cursor-pointer w-1/3" aria-label="Use dark theme">
+    <span class="hero-moon-micro size-4 opacity-75 hover:opacity-100"></span>
+  </button>
+</div>
+      </div>
+    </header>
+
+    <main class="flex-1 px-4 py-6 sm:px-6 lg:px-8">
+      <div class="mx-auto w-full max-w-4xl space-y-6">
+        <div class="space-y-8">
+  <h1 class="text-2xl font-bold">Settings</h1>
+
+  <div class="card bg-base-100 border border-base-300 shadow-sm">
+    <div class="card-body">
+      <h2 class="card-title">
+        <span class="hero-microphone size-5 text-primary"></span> Capture source
+      </h2>
+      <p class="text-sm opacity-70">
+        Active source: <span data-test="active-capture-source" class="font-medium">microphone</span>
+      </p>
+
+      <form id="capture-source-form" data-test="capture-source-form" phx-change="select_source" class="space-y-1">
+        <label class="flex items-center gap-2">
+          <input type="radio" name="source" value="microphone" checked class="radio radio-sm">
+          Microphone
+          
+        </label><label class="flex items-center gap-2">
+          <input type="radio" name="source" value="tap" class="radio radio-sm">
+          System Audio Tap
+          <span class="badge badge-ghost badge-sm">not set up</span>
+        </label>
+      </form>
+
+      
+    </div>
+  </div>
+
+  <div class="card bg-base-100 border border-base-300 shadow-sm">
+    <div class="card-body">
+      <h2 class="card-title">
+        <span class="hero-shield-check size-5 text-primary"></span> Recording consent policy
+      </h2>
+      <p class="text-sm opacity-70">
+        Active policy: <span data-test="active-consent-policy" class="font-medium">announce</span>
+      </p>
+
+      <form id="consent-policy-form" data-test="consent-policy-form" phx-change="select_policy" class="space-y-2">
+        <div data-test="policy-option" data-policy="silent">
+          <label class="flex items-center gap-2">
+            <input type="radio" name="policy" value="silent" class="radio radio-sm">
+            silent
+          </label>
+          <p data-test="policy-explanation" data-policy="silent" class="pl-6 text-sm opacity-70">
+            Records with no notice shown. Use only where you already have consent.
+          </p>
+        </div><div data-test="policy-option" data-policy="notify">
+          <label class="flex items-center gap-2">
+            <input type="radio" name="policy" value="notify" class="radio radio-sm">
+            notify
+          </label>
+          <p data-test="policy-explanation" data-policy="notify" class="pl-6 text-sm opacity-70">
+            Shows an on-screen notice that recording is active.
+          </p>
+        </div><div data-test="policy-option" data-policy="announce">
+          <label class="flex items-center gap-2">
+            <input type="radio" name="policy" value="announce" checked class="radio radio-sm">
+            announce
+          </label>
+          <p data-test="policy-explanation" data-policy="announce" class="pl-6 text-sm opacity-70">
+            Plays an audible notice and waits for it to be delivered before recording.
+          </p>
+        </div>
+      </form>
+
+      <div data-test="legal-disclaimer" class="text-xs opacity-60">
+        This is general guidance, not legal advice — recording-consent laws vary by jurisdiction.
+      </div>
+    </div>
+  </div>
+
+  <div class="card bg-base-100 border border-base-300 shadow-sm">
+    <div class="card-body">
+      <h2 class="card-title">
+        <span class="hero-cpu-chip size-5 text-primary"></span> Transcription model
+      </h2>
+      <p class="text-sm opacity-70">
+        Active model: <span data-test="selected-model" class="font-mono"></span>
+      </p>
+
+      <form id="active-model-form" data-test="active-model-form" phx-change="switch_active_model" class="space-y-1">
+        <label class="flex items-center gap-2">
+          <input type="radio" name="model_id" value="base" class="radio radio-sm">
+          Base (English)
+        </label>
+      </form>
+
+      
+    </div>
+  </div>
+
+  <div class="card bg-base-100 border border-base-300 shadow-sm">
+    <div class="card-body">
+      <h2 class="card-title">
+        <span class="hero-command-line size-5 text-primary"></span> Assistant access
+      </h2>
+      <p class="text-sm opacity-70">
+        Lets a local AI assistant (via MCP, over stdio — never a network port) search your
+        transcripts, read them with speaker/timestamp attribution, and attach summaries.
+        Off by default; revoke it any time to instantly cut the assistant off.
+      </p>
+      <p class="text-sm opacity-70">
+        Current status: <span data-test="assistant-access-status" class="font-medium">disabled</span>
+      </p>
+
+      <form id="assistant-access-form" data-test="assistant-access-form" phx-change="set_assistant_access" class="space-y-1">
+        <label class="flex items-center gap-2">
+          <input type="radio" name="access" value="enabled" class="radio radio-sm">
+          enabled
+        </label><label class="flex items-center gap-2">
+          <input type="radio" name="access" value="disabled" checked class="radio radio-sm">
+          disabled
+        </label>
+      </form>
+    </div>
+  </div>
+</div>
+      </div>
+    </main>
+  </div>
+
+  <div class="drawer-side z-20">
+    <label for="app-drawer-toggle" aria-label="close navigation" class="drawer-overlay"></label>
+    <aside class="w-64 min-h-full bg-base-200 border-r border-base-300 flex flex-col">
+      <div class="p-6 border-b border-base-300">
+        <a href="/recordings" class="flex w-fit items-center gap-2">
+          <span class="inline-block h-2.5 w-2.5 rounded-full bg-primary"></span>
+          <span class="font-bold tracking-tight">EarWitness</span>
+        </a>
+      </div>
+      <ul class="menu p-4 text-base-content flex-1">
+        <li>
+          <a href="/recordings">
+            <span class="hero-microphone size-4"></span> Recordings
+          </a>
+        </li>
+        <li>
+          <a href="/search">
+            <span class="hero-magnifying-glass size-4"></span> Search
+          </a>
+        </li>
+        <li>
+          <a href="/bots">
+            <span class="hero-user-group size-4"></span> Bots
+          </a>
+        </li>
+        <li>
+          <a href="/settings">
+            <span class="hero-cog-6-tooth size-4"></span> Settings
+          </a>
+        </li>
+        <li>
+          <a href="/setup">
+            <span class="hero-sparkles size-4"></span> Setup
+          </a>
+        </li>
+      </ul>
+    </aside>
+  </div>
+</div>
+
+<div id="flash-group" aria-live="polite">
+  
+  
+
+  <div id="client-error" phx-click="[[&quot;push&quot;,{&quot;value&quot;:{&quot;key&quot;:&quot;error&quot;},&quot;event&quot;:&quot;lv:clear-flash&quot;}],[&quot;hide&quot;,{&quot;time&quot;:200,&quot;to&quot;:&quot;#client-error&quot;,&quot;transition&quot;:[[&quot;transition-all&quot;,&quot;ease-in&quot;,&quot;duration-200&quot;],[&quot;opacity-100&quot;,&quot;translate-y-0&quot;,&quot;sm:scale-100&quot;],[&quot;opacity-0&quot;,&quot;translate-y-4&quot;,&quot;sm:translate-y-0&quot;,&quot;sm:scale-95&quot;]]}]]" role="alert" class="toast toast-top toast-end z-50" hidden phx-connected="[[&quot;hide&quot;,{&quot;time&quot;:200,&quot;to&quot;:&quot;#client-error&quot;,&quot;transition&quot;:[[&quot;transition-all&quot;,&quot;ease-in&quot;,&quot;duration-200&quot;],[&quot;opacity-100&quot;,&quot;translate-y-0&quot;,&quot;sm:scale-100&quot;],[&quot;opacity-0&quot;,&quot;translate-y-4&quot;,&quot;sm:translate-y-0&quot;,&quot;sm:scale-95&quot;]]}],[&quot;set_attr&quot;,{&quot;attr&quot;:[&quot;hidden&quot;,&quot;&quot;]}]]" phx-disconnected="[[&quot;show&quot;,{&quot;time&quot;:300,&quot;to&quot;:&quot;.phx-client-error #client-error&quot;,&quot;transition&quot;:[[&quot;transition-all&quot;,&quot;ease-out&quot;,&quot;duration-300&quot;],[&quot;opacity-0&quot;,&quot;translate-y-4&quot;,&quot;sm:translate-y-0&quot;,&quot;sm:scale-95&quot;],[&quot;opacity-100&quot;,&quot;translate-y-0&quot;,&quot;sm:scale-100&quot;]]}],[&quot;remove_attr&quot;,{&quot;attr&quot;:&quot;hidden&quot;}]]">
+  <div class="alert w-80 sm:w-96 max-w-80 sm:max-w-96 text-wrap shadow-lg alert-error">
+    
+    <span class="hero-exclamation-circle size-5 shrink-0"></span>
+    <div>
+      <p class="font-semibold">We can&#39;t find the internet</p>
+      <p>
+    Attempting to reconnect
+    <span class="hero-arrow-path ml-1 size-3 motion-safe:animate-spin"></span>
+  </p>
+    </div>
+  </div>
+</div>
+
+  <div id="server-error" phx-click="[[&quot;push&quot;,{&quot;value&quot;:{&quot;key&quot;:&quot;error&quot;},&quot;event&quot;:&quot;lv:clear-flash&quot;}],[&quot;hide&quot;,{&quot;time&quot;:200,&quot;to&quot;:&quot;#server-error&quot;,&quot;transition&quot;:[[&quot;transition-all&quot;,&quot;ease-in&quot;,&quot;duration-200&quot;],[&quot;opacity-100&quot;,&quot;translate-y-0&quot;,&quot;sm:scale-100&quot;],[&quot;opacity-0&quot;,&quot;translate-y-4&quot;,&quot;sm:translate-y-0&quot;,&quot;sm:scale-95&quot;]]}]]" role="alert" class="toast toast-top toast-end z-50" hidden phx-connected="[[&quot;hide&quot;,{&quot;time&quot;:200,&quot;to&quot;:&quot;#server-error&quot;,&quot;transition&quot;:[[&quot;transition-all&quot;,&quot;ease-in&quot;,&quot;duration-200&quot;],[&quot;opacity-100&quot;,&quot;translate-y-0&quot;,&quot;sm:scale-100&quot;],[&quot;opacity-0&quot;,&quot;translate-y-4&quot;,&quot;sm:translate-y-0&quot;,&quot;sm:scale-95&quot;]]}],[&quot;set_attr&quot;,{&quot;attr&quot;:[&quot;hidden&quot;,&quot;&quot;]}]]" phx-disconnected="[[&quot;show&quot;,{&quot;time&quot;:300,&quot;to&quot;:&quot;.phx-server-error #server-error&quot;,&quot;transition&quot;:[[&quot;transition-all&quot;,&quot;ease-out&quot;,&quot;duration-300&quot;],[&quot;opacity-0&quot;,&quot;translate-y-4&quot;,&quot;sm:translate-y-0&quot;,&quot;sm:scale-95&quot;],[&quot;opacity-100&quot;,&quot;translate-y-0&quot;,&quot;sm:scale-100&quot;]]}],[&quot;remove_attr&quot;,{&quot;attr&quot;:&quot;hidden&quot;}]]">
+  <div class="alert w-80 sm:w-96 max-w-80 sm:max-w-96 text-wrap shadow-lg alert-error">
+    
+    <span class="hero-exclamation-circle size-5 shrink-0"></span>
+    <div>
+      <p class="font-semibold">Something went wrong!</p>
+      <p>
+    Attempting to reconnect
+    <span class="hero-arrow-path ml-1 size-3 motion-safe:animate-spin"></span>
+  </p>
+    </div>
+  </div>
+</div>
+</div></div>
+<div id="phx-GMGTIZVQhpyMmzkk" data-phx-session="SFMyNTY.g2gDaAJhBnQAAAAIdwJpZG0AAAAUcGh4LUdNR1RJWlZRaHB5TW16a2t3B3Nlc3Npb250AAAAAHcEdmlld3cjRWxpeGlyLkVhcldpdG5lc3NXZWIuQ2hhdFdpZGdldExpdmV3CnBhcmVudF9waWR3A25pbHcGcm91dGVydwNuaWx3CXJvb3Rfdmlld3cjRWxpeGlyLkVhcldpdG5lc3NXZWIuQ2hhdFdpZGdldExpdmV3CHJvb3RfcGlkdwNuaWx3EWxpdmVfc2Vzc2lvbl9uYW1ldwdkZWZhdWx0bgYA1zTcVp8BYgABUYA.CmIaIQnYvti2rCgR3W05g1Pl4zadtVZuzNAVi-EanGY" data-phx-static="SFMyNTY.g2gDaAJhBnQAAAADdwJpZG0AAAAUcGh4LUdNR1RJWlZRaHB5TW16a2t3BWZsYXNodAAAAAB3CmFzc2lnbl9uZXdqbgYA1zTcVp8BYgABUYA.QFzlmLLK6rwASmU5F1N-pdlFT-3v7Gn2P533OsDnAvU"><div id="codemyspec-chat-widget" phx-hook="EarWitnessWeb.ChatWidgetLive.CmsScreenshot" class="fixed bottom-4 right-4 z-50">
+  <button type="button" phx-click="toggle" data-test="widget-toggle" class="btn btn-primary btn-circle shadow-lg" aria-label="Support">
+    💬
+  </button>
+
+  
+</div></div>
+  <iframe hidden height="0" width="0" src="/phoenix/live_reload/frame"></iframe></body>
+</html>
