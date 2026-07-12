@@ -15,7 +15,7 @@ defmodule EarWitnessWeb.SearchLive do
     <div class="space-y-6">
       <h1 class="text-2xl font-bold">Search</h1>
 
-      <form id="search-form" data-test="search-form" phx-change="search">
+      <form id="search-form" data-test="search-form" phx-change="search" class="space-y-3">
         <label class="input input-bordered flex w-full items-center gap-2">
           <.icon name="hero-magnifying-glass" class="size-4 opacity-60" />
           <input
@@ -23,21 +23,23 @@ defmodule EarWitnessWeb.SearchLive do
             name="q"
             value={@query}
             placeholder="Search everything ever said..."
+            phx-debounce="200"
             class="grow"
           />
         </label>
-      </form>
 
-      <form id="search-filters" data-test="search-filters" phx-change="filter" class="flex flex-wrap gap-2">
-        <input
-          type="text"
-          name="speaker"
-          value={@filters["speaker"]}
-          placeholder="Speaker"
-          class="input input-bordered input-sm"
-        />
-        <input type="date" name="from" value={@filters["from"]} class="input input-bordered input-sm" />
-        <input type="date" name="to" value={@filters["to"]} class="input input-bordered input-sm" />
+        <div data-test="search-filters" class="flex flex-wrap gap-2">
+          <input
+            type="text"
+            name="speaker"
+            value={@filters["speaker"]}
+            placeholder="Speaker"
+            phx-debounce="200"
+            class="input input-bordered input-sm"
+          />
+          <input type="date" name="from" value={@filters["from"]} class="input input-bordered input-sm" />
+          <input type="date" name="to" value={@filters["to"]} class="input input-bordered input-sm" />
+        </div>
       </form>
 
       <p :if={@query != "" and @results == []} class="text-sm opacity-70">
@@ -98,18 +100,22 @@ defmodule EarWitnessWeb.SearchLive do
   end
 
   @impl true
-  def handle_event("search", %{"q" => query}, socket) do
-    {:noreply, socket |> assign(:query, query) |> run_search()}
-  end
+  def handle_event("search", params, socket) do
+    # Query and filters live in one form, so every change carries the full
+    # state. Missing keys fall back to the current assign rather than being
+    # blanked — a change to one field never wipes another (issue 110f3c94,
+    # where a filter interaction raced the query and reset it to empty).
+    current = socket.assigns
 
-  def handle_event("filter", params, socket) do
+    query = Map.get(params, "q", current.query)
+
     filters = %{
-      "speaker" => Map.get(params, "speaker", ""),
-      "from" => Map.get(params, "from", ""),
-      "to" => Map.get(params, "to", "")
+      "speaker" => Map.get(params, "speaker", current.filters["speaker"]),
+      "from" => Map.get(params, "from", current.filters["from"]),
+      "to" => Map.get(params, "to", current.filters["to"])
     }
 
-    {:noreply, socket |> assign(:filters, filters) |> run_search()}
+    {:noreply, socket |> assign(query: query, filters: filters) |> run_search()}
   end
 
   defp run_search(socket) do

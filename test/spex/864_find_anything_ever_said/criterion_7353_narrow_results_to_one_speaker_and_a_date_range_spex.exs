@@ -37,7 +37,7 @@ defmodule EarWitnessSpex.FindAnythingEverSaid.Criterion7353Spex do
             context do
         html =
           context.view
-          |> form(~s([data-test="search-filters"]), %{
+          |> form(~s([data-test="search-form"]), %{
             "speaker" => context.speaker,
             "from" => Date.to_iso8601(Date.add(Date.utc_today(), -30)),
             "to" => Date.to_iso8601(Date.utc_today())
@@ -61,7 +61,7 @@ defmodule EarWitnessSpex.FindAnythingEverSaid.Criterion7353Spex do
       then_ "an all-in-the-past date range clears the results", context do
         html =
           context.view
-          |> form(~s([data-test="search-filters"]), %{
+          |> form(~s([data-test="search-form"]), %{
             "speaker" => context.speaker,
             "from" => "2020-01-01",
             "to" => "2020-12-31"
