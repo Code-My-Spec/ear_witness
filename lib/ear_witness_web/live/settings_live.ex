@@ -18,24 +18,26 @@ defmodule EarWitnessWeb.SettingsLive do
   @impl true
   def render(assigns) do
     ~H"""
-    <div class="p-6 space-y-8">
+    <div class="space-y-8">
       <h1 class="text-2xl font-bold">Settings</h1>
 
-      <div class="card bg-base-100 shadow-sm">
+      <div class="card bg-base-100 border border-base-300 shadow-sm">
         <div class="card-body">
-          <h2 class="card-title">Capture source</h2>
+          <h2 class="card-title">
+            <.icon name="hero-microphone" class="size-5 text-primary" /> Capture source
+          </h2>
           <p class="text-sm opacity-70">
-            Active source: <span data-test="active-capture-source">{source_label(@active_source)}</span>
+            Active source: <span data-test="active-capture-source" class="font-medium">{source_label(@active_source)}</span>
           </p>
 
-          <form id="capture-source-form" data-test="capture-source-form" phx-change="select_source">
+          <form id="capture-source-form" data-test="capture-source-form" phx-change="select_source" class="space-y-1">
             <label :for={source <- @capture_sources} class="flex items-center gap-2">
               <input
                 type="radio"
                 name="source"
                 value={source_value(source.type)}
                 checked={source.type == @active_source}
-                class="radio"
+                class="radio radio-sm"
               />
               {source.name}
               <span :if={!source.available} class="badge badge-ghost badge-sm">not set up</span>
@@ -43,6 +45,7 @@ defmodule EarWitnessWeb.SettingsLive do
           </form>
 
           <div :if={@tap_setup_needed} data-test="tap-setup-guide" class="alert alert-warning">
+            <.icon name="hero-exclamation-triangle" class="size-5" />
             The system audio tap isn't set up on this machine yet. Install and enable it in your
             operating system's audio settings, then come back and select it here — the tap is
             never activated automatically.
@@ -50,11 +53,13 @@ defmodule EarWitnessWeb.SettingsLive do
         </div>
       </div>
 
-      <div class="card bg-base-100 shadow-sm">
+      <div class="card bg-base-100 border border-base-300 shadow-sm">
         <div class="card-body">
-          <h2 class="card-title">Recording consent policy</h2>
+          <h2 class="card-title">
+            <.icon name="hero-shield-check" class="size-5 text-primary" /> Recording consent policy
+          </h2>
           <p class="text-sm opacity-70">
-            Active policy: <span data-test="active-consent-policy">{@consent_policy}</span>
+            Active policy: <span data-test="active-consent-policy" class="font-medium">{@consent_policy}</span>
           </p>
 
           <form
@@ -70,11 +75,11 @@ defmodule EarWitnessWeb.SettingsLive do
                   name="policy"
                   value={policy.id}
                   checked={policy.id == @consent_policy}
-                  class="radio"
+                  class="radio radio-sm"
                 />
                 {policy.id}
               </label>
-              <p data-test="policy-explanation" data-policy={policy.id} class="text-sm opacity-70 pl-6">
+              <p data-test="policy-explanation" data-policy={policy.id} class="pl-6 text-sm opacity-70">
                 {policy.explanation}
               </p>
             </div>
@@ -86,18 +91,20 @@ defmodule EarWitnessWeb.SettingsLive do
         </div>
       </div>
 
-      <div class="card bg-base-100 shadow-sm">
+      <div class="card bg-base-100 border border-base-300 shadow-sm">
         <div class="card-body">
-          <h2 class="card-title">Transcription model</h2>
+          <h2 class="card-title">
+            <.icon name="hero-cpu-chip" class="size-5 text-primary" /> Transcription model
+          </h2>
           <p class="text-sm opacity-70">
-            Active model: <span data-test="selected-model">{@active_model_id}</span>
+            Active model: <span data-test="selected-model" class="font-mono">{@active_model_id}</span>
           </p>
 
           <form
             id="active-model-form"
             data-test="active-model-form"
             phx-change="switch_active_model"
-            class="space-y-2"
+            class="space-y-1"
           >
             <label :for={model <- @downloaded_models} class="flex items-center gap-2">
               <input
@@ -105,7 +112,7 @@ defmodule EarWitnessWeb.SettingsLive do
                 name="model_id"
                 value={model.id}
                 checked={model.id == @active_model_id}
-                class="radio"
+                class="radio radio-sm"
               />
               {model.name}
             </label>
@@ -119,22 +126,25 @@ defmodule EarWitnessWeb.SettingsLive do
         </div>
       </div>
 
-      <div class="card bg-base-100 shadow-sm">
+      <div class="card bg-base-100 border border-base-300 shadow-sm">
         <div class="card-body">
-          <h2 class="card-title">Assistant access</h2>
+          <h2 class="card-title">
+            <.icon name="hero-command-line" class="size-5 text-primary" /> Assistant access
+          </h2>
           <p class="text-sm opacity-70">
             Lets a local AI assistant (via MCP, over stdio — never a network port) search your
             transcripts, read them with speaker/timestamp attribution, and attach summaries.
             Off by default; revoke it any time to instantly cut the assistant off.
           </p>
           <p class="text-sm opacity-70">
-            Current status: <span data-test="assistant-access-status">{@assistant_access}</span>
+            Current status: <span data-test="assistant-access-status" class="font-medium">{@assistant_access}</span>
           </p>
 
           <form
             id="assistant-access-form"
             data-test="assistant-access-form"
             phx-change="set_assistant_access"
+            class="space-y-1"
           >
             <label :for={value <- [:enabled, :disabled]} class="flex items-center gap-2">
               <input
@@ -142,7 +152,7 @@ defmodule EarWitnessWeb.SettingsLive do
                 name="access"
                 value={value}
                 checked={value == @assistant_access}
-                class="radio"
+                class="radio radio-sm"
               />
               {value}
             </label>

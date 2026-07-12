@@ -70,7 +70,7 @@ defmodule EarWitnessWeb do
     end
   end
 
-  def static_paths, do: ~w(assets images favicon.ico robots.txt)
+  def static_paths, do: ~w(assets fonts images favicon.ico robots.txt)
 
   def verified_routes do
     quote do
@@ -108,12 +108,13 @@ defmodule EarWitnessWeb do
       import Phoenix.View
 
       import EarWitnessWeb.ErrorHelpers
+      import EarWitnessWeb.CoreComponents
       use Gettext, backend: EarWitnessWeb.Gettext
 
       use Phoenix.VerifiedRoutes,
         endpoint: EarWitnessWeb.Endpoint,
         router: EarWitnessWeb.Router,
-        statics: ~w(assets images favicon.ico robots.txt)
+        statics: ~w(assets fonts images favicon.ico robots.txt)
     end
   end
 

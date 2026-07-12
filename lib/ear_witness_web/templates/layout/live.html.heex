@@ -1,11 +1,70 @@
-<main role="main" class="container">
-  <p class="alert alert-info" role="alert"
-    phx-click="lv:clear-flash"
-    phx-value-key="info"><%= Phoenix.Flash.get(@flash, :info) %></p>
+<div class="drawer lg:drawer-open min-h-screen">
+  <input id="app-drawer-toggle" type="checkbox" class="drawer-toggle" />
 
-  <p class="alert alert-danger" role="alert"
-    phx-click="lv:clear-flash"
-    phx-value-key="error"><%= Phoenix.Flash.get(@flash, :error) %></p>
+  <div class="drawer-content flex flex-col bg-base-100">
+    <header class="navbar bg-base-200 border-b border-base-300 gap-2">
+      <div class="flex-none lg:hidden">
+        <label
+          for="app-drawer-toggle"
+          class="btn btn-square btn-ghost"
+          aria-label="Open navigation"
+        >
+          <.icon name="hero-bars-3" class="size-5" />
+        </label>
+      </div>
+      <div class="flex-1 px-2 lg:px-4">
+        <span class="font-semibold tracking-tight lg:hidden">EarWitness</span>
+      </div>
+      <div class="flex-none px-2">
+        <.theme_toggle />
+      </div>
+    </header>
 
-  <%= @inner_content %>
-</main>
+    <main class="flex-1 px-4 py-6 sm:px-6 lg:px-8">
+      <div class="mx-auto w-full max-w-4xl space-y-6">
+        {@inner_content}
+      </div>
+    </main>
+  </div>
+
+  <div class="drawer-side z-20">
+    <label for="app-drawer-toggle" aria-label="close navigation" class="drawer-overlay"></label>
+    <aside class="w-64 min-h-full bg-base-200 border-r border-base-300 flex flex-col">
+      <div class="p-6 border-b border-base-300">
+        <a href={~p"/recordings"} class="flex w-fit items-center gap-2">
+          <span class="inline-block h-2.5 w-2.5 rounded-full bg-primary"></span>
+          <span class="font-bold tracking-tight">EarWitness</span>
+        </a>
+      </div>
+      <ul class="menu p-4 text-base-content flex-1">
+        <li>
+          <a href={~p"/recordings"}>
+            <.icon name="hero-microphone" class="size-4" /> Recordings
+          </a>
+        </li>
+        <li>
+          <a href={~p"/search"}>
+            <.icon name="hero-magnifying-glass" class="size-4" /> Search
+          </a>
+        </li>
+        <li>
+          <a href={~p"/bots"}>
+            <.icon name="hero-user-group" class="size-4" /> Bots
+          </a>
+        </li>
+        <li>
+          <a href={~p"/settings"}>
+            <.icon name="hero-cog-6-tooth" class="size-4" /> Settings
+          </a>
+        </li>
+        <li :if={setup_needed?()}>
+          <a href={~p"/setup"}>
+            <.icon name="hero-sparkles" class="size-4" /> Setup
+          </a>
+        </li>
+      </ul>
+    </aside>
+  </div>
+</div>
+
+<.flash_group flash={@flash} />

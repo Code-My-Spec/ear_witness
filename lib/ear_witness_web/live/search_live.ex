@@ -12,15 +12,20 @@ defmodule EarWitnessWeb.SearchLive do
   @impl true
   def render(assigns) do
     ~H"""
-    <div class="p-6 space-y-6">
+    <div class="space-y-6">
+      <h1 class="text-2xl font-bold">Search</h1>
+
       <form id="search-form" data-test="search-form" phx-change="search">
-        <input
-          type="text"
-          name="q"
-          value={@query}
-          placeholder="Search everything ever said..."
-          class="input input-bordered w-full"
-        />
+        <label class="input input-bordered flex w-full items-center gap-2">
+          <.icon name="hero-magnifying-glass" class="size-4 opacity-60" />
+          <input
+            type="text"
+            name="q"
+            value={@query}
+            placeholder="Search everything ever said..."
+            class="grow"
+          />
+        </label>
       </form>
 
       <form id="search-filters" data-test="search-filters" phx-change="filter" class="flex flex-wrap gap-2">
@@ -35,6 +40,10 @@ defmodule EarWitnessWeb.SearchLive do
         <input type="date" name="to" value={@filters["to"]} class="input input-bordered input-sm" />
       </form>
 
+      <p :if={@query != "" and @results == []} class="text-sm opacity-70">
+        Nothing matches yet.
+      </p>
+
       <div class="space-y-3">
         <.result :for={hit <- @results} hit={hit} />
       </div>
@@ -44,17 +53,22 @@ defmodule EarWitnessWeb.SearchLive do
 
   defp result(%{hit: %{type: :segment}} = assigns) do
     ~H"""
-    <div data-test="search-result" class="card card-body bg-base-100 shadow-sm">
+    <div data-test="search-result" class="card bg-base-100 border border-base-300 shadow-sm">
       <.link
         navigate={~p"/recordings/#{@hit.recording_id}/transcript?#{[segment: @hit.segment_id]}"}
-        class="block space-y-1"
+        class="card-body gap-1 py-3 hover:bg-base-200"
       >
         <div class="flex flex-wrap items-center gap-2 text-sm opacity-70">
-          <span data-test="result-recording-title">{@hit.recording_title}</span>
-          <span data-test="result-timestamp">{Format.duration(@hit.timestamp / 1000)}</span>
-          <span data-test="result-speaker">{@hit.speaker}</span>
+          <.icon name="hero-document-text" class="size-4" />
+          <span data-test="result-recording-title" class="font-medium text-base-content">
+            {@hit.recording_title}
+          </span>
+          <span data-test="result-timestamp" class="tnum badge badge-ghost badge-sm">
+            {Format.duration(@hit.timestamp / 1000)}
+          </span>
+          <span data-test="result-speaker" class="badge badge-outline badge-sm">{@hit.speaker}</span>
         </div>
-        <p data-test="result-snippet">{@hit.snippet}</p>
+        <p data-test="result-snippet" class="text-base-content">{@hit.snippet}</p>
       </.link>
     </div>
     """
@@ -62,10 +76,12 @@ defmodule EarWitnessWeb.SearchLive do
 
   defp result(%{hit: %{type: :recording}} = assigns) do
     ~H"""
-    <div data-test="recording-result" class="card card-body bg-base-100 shadow-sm">
-      <.link navigate={~p"/recordings/#{@hit.recording_id}"} class="block space-y-1">
-        <span data-test="result-recording-title">{@hit.recording_title}</span>
-        <p data-test="result-snippet">{@hit.snippet}</p>
+    <div data-test="recording-result" class="card bg-base-100 border border-base-300 shadow-sm">
+      <.link navigate={~p"/recordings/#{@hit.recording_id}"} class="card-body gap-1 py-3 hover:bg-base-200">
+        <span data-test="result-recording-title" class="flex items-center gap-2 font-medium">
+          <.icon name="hero-folder" class="size-4" /> {@hit.recording_title}
+        </span>
+        <p data-test="result-snippet" class="text-base-content">{@hit.snippet}</p>
       </.link>
     </div>
     """

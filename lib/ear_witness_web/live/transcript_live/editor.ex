@@ -18,17 +18,28 @@ defmodule EarWitnessWeb.TranscriptLive.Editor do
   @impl true
   def render(assigns) do
     ~H"""
-    <div class="p-6 space-y-6">
-      <div class="flex items-center gap-4">
-        <.link navigate={~p"/recordings/#{@recording.id}"} class="link">&larr; {@recording.title}</.link>
-        <button type="button" data-test="undo-button" phx-click="undo" class="btn btn-sm">
-          Undo
+    <div class="space-y-6">
+      <div class="flex flex-wrap items-center justify-between gap-2">
+        <.link navigate={~p"/recordings/#{@recording.id}"} class="link link-hover flex items-center gap-1">
+          <.icon name="hero-arrow-left" class="size-4" /> {@recording.title}
+        </.link>
+        <button type="button" data-test="undo-button" phx-click="undo" class="btn btn-sm btn-ghost">
+          <.icon name="hero-arrow-uturn-left" class="size-4" /> Undo
         </button>
       </div>
 
       <.live_component module={SpeakerPanel} id="speaker-panel" speakers={@speakers} />
 
       <div data-test="transcript" class="space-y-3">
+        <%!--
+          Several `_spex.exs` scans (story 863) resolve a segment's id by
+          reading `data-test="transcript-segment" data-segment-id="..."`
+          (kept adjacent below — no attribute may land between them) and
+          then taking the tag's OWN bare text as the transcript text — so
+          `segment.text` stays the first, unwrapped child; every other
+          affordance (focus/playing markers, timestamp, speaker, the edit
+          forms) is styled below it, never before it.
+        --%>
         <div
           :for={segment <- @segments}
           data-test="transcript-segment"
@@ -36,21 +47,33 @@ defmodule EarWitnessWeb.TranscriptLive.Editor do
           phx-click="play_segment"
           phx-value-id={segment.id}
           class={[
-            "card card-body bg-base-100 shadow-sm cursor-pointer space-y-2",
-            segment.id == @focused_segment_id && "ring ring-primary"
+            "card card-body cursor-pointer gap-2 border bg-base-100 text-base leading-relaxed shadow-sm transition-colors",
+            (segment.id == @focused_segment_id && "border-primary ring ring-primary/30") ||
+              "border-base-300",
+            segment.id == @playing_segment_id && "bg-primary/5"
           ]}
         >
           {segment.text}
           <span :if={segment.id == @focused_segment_id} data-test="focused-segment" class="hidden">
             {segment.text}
           </span>
-          <span :if={segment.id == @playing_segment_id} data-test="playing-segment" class="badge badge-accent">
-            Playing
+          <span
+            :if={segment.id == @playing_segment_id}
+            data-test="playing-segment"
+            class="badge badge-accent badge-sm w-fit gap-1"
+          >
+            <.icon name="hero-play-circle" class="size-3.5" /> Playing
           </span>
 
           <div class="flex flex-wrap items-center gap-2 text-sm opacity-70">
-            <span data-test="segment-timestamp">{Format.duration(segment.start_offset / 1000)}</span>
-            <span data-test="segment-speaker" data-segment-id={segment.id}>
+            <span data-test="segment-timestamp" class="tnum">
+              {Format.duration(segment.start_offset / 1000)}
+            </span>
+            <span
+              data-test="segment-speaker"
+              data-segment-id={segment.id}
+              class="badge badge-ghost badge-sm"
+            >
               {@speaker_labels[segment.id]}
             </span>
           </div>
@@ -63,7 +86,12 @@ defmodule EarWitnessWeb.TranscriptLive.Editor do
             phx-value-id={segment.id}
             class="flex items-center gap-2"
           >
-            <input type="text" name="segment[text]" value={segment.text} class="input input-bordered input-sm flex-1" />
+            <input
+              type="text"
+              name="segment[text]"
+              value={segment.text}
+              class="input input-bordered input-sm flex-1"
+            />
             <button type="submit" class="btn btn-sm">Save</button>
           </form>
 
@@ -91,9 +119,9 @@ defmodule EarWitnessWeb.TranscriptLive.Editor do
             data-segment-id={segment.id}
             phx-click="revert_segment"
             phx-value-id={segment.id}
-            class="btn btn-sm btn-ghost"
+            class="btn btn-sm btn-ghost self-start"
           >
-            Revert to original
+            <.icon name="hero-arrow-uturn-left" class="size-3.5" /> Revert to original
           </button>
         </div>
       </div>

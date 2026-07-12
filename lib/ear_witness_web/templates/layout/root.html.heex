@@ -1,19 +1,43 @@
 <!DOCTYPE html>
 <html lang="en">
   <head>
-    <meta charset="utf-8"/>
-    <meta http-equiv="X-UA-Compatible" content="IE=edge"/>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-    <meta name="csrf-token" content={Plug.CSRFProtection.get_csrf_token()}/>
-    <.live_title suffix={gettext(" · Your Todos")} ><%= assigns[:page_title] || "Todo" %></.live_title>
-    <link rel="icon" type="image/svg+xml" href={~p"/images/icon.svg"}>
-    <link phx-track-static rel="stylesheet" href={~p"/assets/app.css"}/>
-    <script defer phx-track-static type="text/javascript" src={~p"/assets/app.js"}></script>
+    <meta charset="utf-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="csrf-token" content={Plug.CSRFProtection.get_csrf_token()} />
+    <.live_title suffix=" · EarWitness">{assigns[:page_title] || "EarWitness"}</.live_title>
+    <link rel="icon" type="image/png" href={~p"/images/icon.png"} />
+    <link
+      rel="preload"
+      as="font"
+      type="font/woff2"
+      href={~p"/fonts/ibm-plex-sans-latin.woff2"}
+      crossorigin="anonymous"
+    />
+    <link phx-track-static rel="stylesheet" href={~p"/assets/app.css"} />
+    <script defer phx-track-static type="text/javascript" src={~p"/assets/app.js"}>
+    </script>
+    <script>
+      (() => {
+        const setTheme = (theme) => {
+          if (theme === "system") {
+            localStorage.removeItem("phx:theme");
+            document.documentElement.removeAttribute("data-theme");
+          } else {
+            localStorage.setItem("phx:theme", theme);
+            document.documentElement.setAttribute("data-theme", theme);
+          }
+        };
+        if (!document.documentElement.hasAttribute("data-theme")) {
+          setTheme(localStorage.getItem("phx:theme") || "system");
+        }
+        window.addEventListener("storage", (e) => e.key === "phx:theme" && setTheme(e.newValue || "system"));
+        window.addEventListener("phx:set-theme", ({ detail: { theme } }) => setTheme(theme));
+      })();
+    </script>
   </head>
-  <body class={String.downcase(inspect Desktop.OS.type())}>
-    <div class="wrap">
-      <%= @inner_content %>
-    </div>
+  <body class="min-h-screen bg-base-100 text-base-content" data-os={String.downcase(inspect(Desktop.OS.type()))}>
+    {@inner_content}
     <%= live_render(@conn, EarWitnessWeb.ChatWidgetLive, id: "codemyspec-chat", sticky: true) %>
   </body>
 </html>

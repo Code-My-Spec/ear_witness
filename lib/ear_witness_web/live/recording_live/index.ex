@@ -14,21 +14,35 @@ defmodule EarWitnessWeb.RecordingLive.Index do
   @impl true
   def render(assigns) do
     ~H"""
-    <div class="p-6 space-y-8">
-      <h1 class="text-2xl font-bold">Recordings</h1>
+    <div class="space-y-8">
+      <div class="flex items-center justify-between">
+        <h1 class="text-2xl font-bold">Recordings</h1>
+        <.link :if={@live_action == :trash} navigate={~p"/recordings"} class="btn btn-ghost btn-sm">
+          <.icon name="hero-arrow-left" class="size-4" /> Back to library
+        </.link>
+      </div>
 
       <div :if={@live_action == :index} class="space-y-8">
-        <div class="card bg-base-100 shadow-sm">
+        <div class="card bg-base-100 border border-base-300 shadow-sm">
           <div class="card-body">
-            <h2 class="card-title">Record</h2>
+            <h2 class="card-title">
+              <.icon name="hero-microphone" class="size-5 text-primary" /> Record
+            </h2>
             <div :if={@capture_error} data-test="capture-error" class="alert alert-error">
+              <.icon name="hero-exclamation-circle" class="size-5" />
               {@capture_error}
             </div>
-            <div :if={@capturing?} data-test="capture-status" class="badge badge-error">recording</div>
-            <div :if={@capture_channels} data-test="capture-channels" class="text-sm opacity-70">
-              {Format.channels(@capture_channels)}
+            <div class="flex flex-wrap items-center gap-2">
+              <div :if={@capturing?} data-test="capture-status" class="badge badge-error gap-1">
+                <span class="inline-block size-2 animate-pulse rounded-full bg-current"></span>
+                recording
+              </div>
+              <div :if={@capture_channels} data-test="capture-channels" class="text-sm opacity-70">
+                {Format.channels(@capture_channels)}
+              </div>
             </div>
             <div :if={@capture_notice == :shown} data-test="capture-notice" class="alert alert-info">
+              <.icon name="hero-information-circle" class="size-5" />
               A notice is shown to participants that recording is active.
             </div>
             <div
@@ -40,79 +54,147 @@ defmodule EarWitnessWeb.RecordingLive.Index do
             </div>
             <div class="flex gap-2">
               <button type="button" class="btn btn-primary" phx-click="record" disabled={@capturing?}>
-                Record
+                <.icon name="hero-play" class="size-4" /> Record
               </button>
               <button type="button" class="btn" phx-click="stop" disabled={!@capturing?}>
-                Stop
+                <.icon name="hero-stop" class="size-4" /> Stop
               </button>
             </div>
           </div>
         </div>
 
-        <div class="card bg-base-100 shadow-sm">
+        <div class="card bg-base-100 border border-base-300 shadow-sm">
           <div class="card-body">
-            <h2 class="card-title">Import a recording</h2>
+            <h2 class="card-title">
+              <.icon name="hero-arrow-up-tray" class="size-5 text-primary" /> Import a recording
+            </h2>
             <div :if={@import_error} data-test="import-error" class="alert alert-error">
+              <.icon name="hero-exclamation-circle" class="size-5" />
               {@import_error}
             </div>
-            <form id="import-form" data-test="import-form" phx-submit="import" phx-change="validate_import">
-              <.live_file_input upload={@uploads.audio_file} />
-              <button type="submit" class="btn btn-primary">Import</button>
+            <form
+              id="import-form"
+              data-test="import-form"
+              phx-submit="import"
+              phx-change="validate_import"
+              class="flex flex-wrap items-center gap-2"
+            >
+              <.live_file_input
+                upload={@uploads.audio_file}
+                class="file-input file-input-bordered file-input-sm"
+              />
+              <button type="submit" class="btn btn-primary btn-sm">Import</button>
             </form>
           </div>
         </div>
 
-        <div class="card bg-base-100 shadow-sm">
+        <div class="card bg-base-100 border border-base-300 shadow-sm">
           <div class="card-body">
-            <h2 class="card-title">Cases</h2>
-            <form id="collection-form" data-test="collection-form" phx-submit="create_collection">
-              <input type="text" name="collection[name]" placeholder="Case name" class="input input-bordered" />
-              <input type="date" name="collection[date]" class="input input-bordered" />
+            <h2 class="card-title">
+              <.icon name="hero-folder" class="size-5 text-primary" /> Cases
+            </h2>
+            <form
+              id="collection-form"
+              data-test="collection-form"
+              phx-submit="create_collection"
+              class="flex flex-wrap items-end gap-2"
+            >
+              <input
+                type="text"
+                name="collection[name]"
+                placeholder="Case name"
+                class="input input-bordered input-sm"
+              />
+              <input type="date" name="collection[date]" class="input input-bordered input-sm" />
               <input
                 type="text"
                 name="collection[participants]"
                 placeholder="Participants"
-                class="input input-bordered"
+                class="input input-bordered input-sm"
               />
-              <button type="submit" class="btn">Create case</button>
+              <button type="submit" class="btn btn-sm">Create case</button>
             </form>
-
-            <div :for={collection <- @collections} data-test="collection" data-collection-id={collection.id} class="mt-4">
+            <%!--
+              `EarWitnessSpex.CollectionSteps.collection_id/2` resolves a
+              case's id by scanning for `data-collection-id="..."` and
+              reading the element's own bare text as the case name — so
+              `collection.name` must render as the FIRST, unwrapped child
+              of this container. Style everything else (the delete button,
+              the recording list) below that bare text, never before it.
+            --%>
+            <div
+              :for={collection <- @collections}
+              data-test="collection"
+              data-collection-id={collection.id}
+              class="mt-4 space-y-2 border-t border-base-200 pt-4 font-medium first:mt-0 first:border-t-0 first:pt-0"
+            >
               {collection.name}
-              <button
-                type="button"
-                data-test="delete-collection-button"
-                data-collection-id={collection.id}
-                phx-click="delete_collection"
-                phx-value-id={collection.id}
-                class="btn btn-xs"
-              >
-                Delete case
-              </button>
-              <div class="pl-4">
+              <div class="flex items-center justify-between font-normal">
+                <span class="text-xs opacity-60">
+                  {length(collection.recordings)} recording(s)
+                </span>
+                <button
+                  type="button"
+                  data-test="delete-collection-button"
+                  data-collection-id={collection.id}
+                  phx-click="delete_collection"
+                  phx-value-id={collection.id}
+                  class="btn btn-xs btn-ghost"
+                >
+                  <.icon name="hero-x-mark" class="size-3.5" /> Delete case
+                </button>
+              </div>
+              <div class="space-y-1 pl-2">
                 <.recording_row :for={recording <- collection.recordings} recording={recording} />
               </div>
             </div>
           </div>
         </div>
 
-        <div data-test="uncategorized-recordings" class="card bg-base-100 shadow-sm">
+        <div
+          data-test="uncategorized-recordings"
+          class="card bg-base-100 border border-base-300 shadow-sm"
+        >
           <div class="card-body">
             <h2 class="card-title">Uncategorized</h2>
-            <.recording_row :for={recording <- @uncategorized} recording={recording} />
+            <p :if={@uncategorized == []} class="text-sm opacity-70">Nothing here yet.</p>
+            <div class="space-y-1">
+              <.recording_row :for={recording <- @uncategorized} recording={recording} />
+            </div>
           </div>
+        </div>
+
+        <div class="flex justify-end">
+          <.link navigate={~p"/recordings/trash"} class="link link-hover text-sm opacity-70">
+            <.icon name="hero-trash" class="size-3.5" /> View trash
+          </.link>
         </div>
       </div>
 
       <div :if={@live_action == :trash} class="space-y-4">
-        <div data-test="trash-retention-notice" class="alert">
+        <div data-test="trash-retention-notice" class="alert alert-warning">
+          <.icon name="hero-exclamation-triangle" class="size-5" />
           Trashed recordings are kept for 30 days before permanent removal.
         </div>
-        <div :for={recording <- @trashed_recordings} data-test="trash-row" data-recording-id={recording.id} class="flex items-center gap-2">
-          {recording.title}
-          <button type="button" data-test="restore-button" phx-click="restore" phx-value-id={recording.id} class="btn btn-xs">
-            Restore
-          </button>
+        <p :if={@trashed_recordings == []} class="text-sm opacity-70">The trash is empty.</p>
+        <div
+          :for={recording <- @trashed_recordings}
+          data-test="trash-row"
+          data-recording-id={recording.id}
+          class="card bg-base-100 border border-base-300 shadow-sm"
+        >
+          <div class="card-body flex-row items-center justify-between py-3">
+            <span>{recording.title}</span>
+            <button
+              type="button"
+              data-test="restore-button"
+              phx-click="restore"
+              phx-value-id={recording.id}
+              class="btn btn-xs"
+            >
+              <.icon name="hero-arrow-uturn-left" class="size-3.5" /> Restore
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -123,10 +205,21 @@ defmodule EarWitnessWeb.RecordingLive.Index do
 
   defp recording_row(assigns) do
     ~H"""
-    <div data-test="recording-row" data-recording-id={@recording.id} class="flex items-center gap-2">
-      <a href={~p"/recordings/#{@recording.id}"} class="link">{@recording.title}</a>
-      <span data-test="recording-duration">{Format.duration(@recording.duration)}</span>
-      <span data-test="recording-source">{source_label(@recording)}</span>
+    <div
+      data-test="recording-row"
+      data-recording-id={@recording.id}
+      class="flex flex-wrap items-center gap-3 rounded-lg px-2 py-1.5 hover:bg-base-200"
+    >
+      <.icon name="hero-document-text" class="size-4 shrink-0 opacity-60" />
+      <a href={~p"/recordings/#{@recording.id}"} class="link link-hover flex-1 min-w-0 truncate">
+        {@recording.title}
+      </a>
+      <span data-test="recording-duration" class="tnum badge badge-ghost badge-sm">
+        {Format.duration(@recording.duration)}
+      </span>
+      <span data-test="recording-source" class="badge badge-outline badge-sm">
+        {source_label(@recording)}
+      </span>
     </div>
     """
   end
