@@ -31,9 +31,13 @@ defmodule EarWitness.Audio.Miniaudio do
 
     # Tolerate a missing NIF so the module (and app) still load on
     # platforms/dev machines where the capture NIF hasn't been built yet —
-    # mirrors EarWitness.Transcribe's convention. Every exported function
-    # below then exits with :nif_library_not_loaded only if it's actually
-    # invoked.
+    # mirrors EarWitness.Transcribe's convention. When the NIF loads, the
+    # native implementations REPLACE the Elixir bodies below; when it does
+    # not (build failed, or a dev code-reload rebound the module before the
+    # .so was reloaded), those bodies stand in as graceful fallbacks rather
+    # than crashing the caller. Read-only listing degrades to "no devices";
+    # capture calls return a clean {:error, :audio_unavailable} the UI
+    # already handles — so, e.g., /settings never 500s on a missing NIF.
     case :erlang.load_nif(path, 0) do
       :ok -> :ok
       {:error, _} -> :ok
@@ -42,7 +46,7 @@ defmodule EarWitness.Audio.Miniaudio do
 
   @doc "Lists capture- and playback-capable audio devices known to the system."
   @spec list_devices() :: [map()]
-  def list_devices, do: exit(:nif_library_not_loaded)
+  def list_devices, do: []
 
   @doc """
   Starts recording 16kHz mono PCM16 from the capture device at `device_index`
@@ -50,7 +54,7 @@ defmodule EarWitness.Audio.Miniaudio do
   default capture device if `device_index` is out of range.
   """
   @spec start_capture(non_neg_integer(), Path.t()) :: {:ok, term()} | {:error, atom()}
-  def start_capture(_device_index, _path), do: exit(:nif_library_not_loaded)
+  def start_capture(_device_index, _path), do: {:error, :audio_unavailable}
 
   @doc """
   Starts recording system-output audio (loopback) to `path`. Only
@@ -59,7 +63,7 @@ defmodule EarWitness.Audio.Miniaudio do
   `{:error, :source_unavailable}` everywhere else, including macOS.
   """
   @spec start_loopback_capture(Path.t()) :: {:ok, term()} | {:error, atom()}
-  def start_loopback_capture(_path), do: exit(:nif_library_not_loaded)
+  def start_loopback_capture(_path), do: {:error, :audio_unavailable}
 
   @doc """
   Stops a capture started by `start_capture/2` or
@@ -67,9 +71,9 @@ defmodule EarWitness.Audio.Miniaudio do
   the start call.
   """
   @spec stop_capture(term()) :: :ok | {:error, atom()}
-  def stop_capture(_handle), do: exit(:nif_library_not_loaded)
+  def stop_capture(_handle), do: {:error, :audio_unavailable}
 
   @doc "Whether system-output loopback capture is available on this machine."
   @spec loopback_available?() :: boolean()
-  def loopback_available?, do: exit(:nif_library_not_loaded)
+  def loopback_available?, do: false
 end
