@@ -73,6 +73,21 @@ defmodule EarWitness.Models do
           {:ok, reference()} | {:error, :unknown_model | :already_downloaded}
   def retry_download(model_id), do: download_model(model_id)
 
+  @doc """
+  Deletes a downloaded model's file and its verification record, freeing
+  the disk. Bundled models can't be deleted (they ship inside the app). If
+  the deleted model was the active one, the active model resets to the
+  bundled model so the app can still transcribe.
+  """
+  @spec delete_model(String.t()) :: :ok | {:error, :unknown_model | :bundled}
+  def delete_model(model_id) do
+    case Catalog.get_model(model_id) do
+      nil -> {:error, :unknown_model}
+      %{bundled: true} -> {:error, :bundled}
+      model -> remove_download(model_id, model)
+    end
+  end
+
   @doc "The current status of a model's download."
   @spec download_status(String.t()) :: Downloader.progress()
   def download_status(model_id) do
@@ -120,6 +135,20 @@ defmodule EarWitness.Models do
         broadcast({:active_model_changed, model})
         {:ok, model}
     end
+  end
+
+  defp remove_download(model_id, model) do
+    _ = File.rm(downloaded_path(model))
+    Repo.delete_all(from(v in VerifiedModel, where: v.model_id == ^model_id))
+
+    if active_model_id() == model_id do
+      settings()
+      |> ModelSettings.changeset(%{active_model_id: Catalog.bundled_model_id()})
+      |> Repo.update!()
+    end
+
+    broadcast({:model_deleted, model})
+    :ok
   end
 
   defp start_download(model_id, model) do

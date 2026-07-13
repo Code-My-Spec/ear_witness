@@ -48,9 +48,11 @@ defmodule EarWitnessSpex.SettingsSteps do
   def switch_active_model(conn, model_id) do
     {:ok, view, _html} = live(conn, "/settings")
 
+    # Settings is now a model manager: each downloaded, non-active model has
+    # a "Use" button (phx-click switch_active_model) rather than one radio form.
     view
-    |> form(~s([data-test="active-model-form"]), %{"model_id" => model_id})
-    |> render_change()
+    |> element(~s([data-test="use-model"][data-model="#{model_id}"]))
+    |> render_click()
 
     view
   end
