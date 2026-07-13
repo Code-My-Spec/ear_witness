@@ -45,7 +45,7 @@ defmodule EarWitness.Transcription.Server do
       _ ->
         task =
           Task.async(fn ->
-            {file_path, EarWitness.Transcribe.transcribe_files([file_path])}
+            {file_path, EarWitness.Transcription.Engine.transcribe(file_path)}
           end)
 
         {:noreply, %{state | task: task, working?: true}}
@@ -57,11 +57,15 @@ defmodule EarWitness.Transcription.Server do
     Logger.info("Done Transcribing File")
 
     text =
-      results
-      |> to_string()
-      |> Jason.decode!()
-      |> Enum.flat_map(&Map.get(&1, "transcription", []))
-      |> Enum.map_join("\n\n", &String.trim(Map.get(&1, "text", "")))
+      case results do
+        {:ok, docs} ->
+          docs
+          |> Enum.flat_map(&Map.get(&1, "transcription", []))
+          |> Enum.map_join("\n\n", &String.trim(Map.get(&1, "text", "")))
+
+        {:error, _reason} ->
+          ""
+      end
 
     text_file_path =
       file_path

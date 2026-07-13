@@ -349,14 +349,72 @@ bool read_pcm(const std::string &fname, std::vector<float> &pcmf32)
   return true;
 }
 
-std::string do_transcribe_files(std::vector<std::string> file_names)
+// Resolves the bundled ggml VAD (silero) model, or "" if none is present.
+// The file ships next to the bundled base model (repo-root models/, the
+// same place the base model's own relative default points at); we also try
+// a sibling of the active model's directory so a model living elsewhere
+// (e.g. a downloaded turbo model) still finds it if co-located. Returning
+// "" makes VAD a no-op (see do_transcribe_files) rather than a failure.
+static std::string resolve_vad_model_path(const std::string &model_path)
+{
+  const std::string vad_name = "ggml-silero-v6.2.0.bin";
+
+  std::vector<std::string> candidates;
+  if (!model_path.empty())
+  {
+    size_t slash = model_path.find_last_of("/\\");
+    if (slash != std::string::npos)
+    {
+      candidates.push_back(model_path.substr(0, slash + 1) + vad_name);
+    }
+  }
+  // Mirrors the base model's relative default (resolves against cwd, which
+  // is the project root in dev and the install dir in the packaged app).
+  candidates.push_back("models/" + vad_name);
+
+  for (const auto &c : candidates)
+  {
+    if (is_file_exist(c))
+    {
+      return c;
+    }
+  }
+  return "";
+}
+
+std::string do_transcribe_files(std::vector<std::string> file_names, std::string model_path)
 {
   whisper_params params;
+
+  // The active model is chosen in Elixir (EarWitness.Models) and passed in;
+  // fall back to the bundled base model when it's empty or missing so a
+  // fresh install (or a not-yet-downloaded selection) still transcribes.
+  if (!model_path.empty() && is_file_exist(model_path))
+  {
+    params.model = model_path;
+  }
+
   whisper_context *ctx = whisper_init_from_file_with_params(params.model.c_str(), whisper_context_default_params());
 
   if (ctx == nullptr)
   {
     throw std::runtime_error("Failed to initialize whisper context");
+  }
+
+  // Resolve the bundled VAD model once. When present, whisper runs Voice
+  // Activity Detection to segment speech before decoding — without it,
+  // greedy decoding over audio with internal pauses/silence can falsely
+  // return zero segments ("No speech was detected"). Missing model => "" =>
+  // VAD stays off and transcription proceeds exactly as before.
+  const std::string vad_model_path = resolve_vad_model_path(params.model);
+  const bool use_vad = !vad_model_path.empty();
+  if (use_vad)
+  {
+    fprintf(stderr, "%s: VAD enabled using '%s'\n", __func__, vad_model_path.c_str());
+  }
+  else
+  {
+    fprintf(stderr, "%s: VAD model not found; running without VAD\n", __func__);
   }
 
   std::ostringstream results;
@@ -382,6 +440,13 @@ std::string do_transcribe_files(std::vector<std::string> file_names)
     wparams.language = params.language.c_str();
     wparams.n_threads = params.n_threads;
     wparams.print_progress = false;
+
+    if (use_vad)
+    {
+      wparams.vad = true;
+      wparams.vad_model_path = vad_model_path.c_str();
+      wparams.vad_params = whisper_vad_default_params();
+    }
 
     if (whisper_full_parallel(ctx, wparams, pcmf32.data(), pcmf32.size(), params.n_processors) != 0)
     {

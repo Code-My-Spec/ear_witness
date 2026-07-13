@@ -8,7 +8,7 @@ defmodule EarWitnessTest.RecordedTranscriptionEngine do
   whisper.cpp or the bundled model changes:
 
       mix run --no-start -e '
-        json = EarWitness.Transcribe.transcribe_files(["test/fixtures/vad-f32.raw"])
+        json = EarWitness.Transcribe.transcribe_files(["test/fixtures/vad-f32.raw"], "")
         File.write!("test/fixtures/transcription_cassettes/vad-f32.json", json)'
 
   Engine contract (the future `EarWitness.Transcription.Engine` implements

@@ -11,8 +11,22 @@ defmodule EarWitness.Transcription.Engine do
   @spec transcribe(Path.t(), keyword()) :: {:ok, [map()]} | {:error, term()}
   def transcribe(audio_path, _opts \\ []) do
     [audio_path]
-    |> EarWitness.Transcribe.transcribe_files()
+    |> EarWitness.Transcribe.transcribe_files(active_model_path())
     |> to_string()
     |> Jason.decode()
+  end
+
+  # Resolves the active model's file path for the NIF. Falls back to an
+  # empty string when nothing is active or the selection isn't downloaded
+  # yet — the NIF then loads the bundled base model. Passing the path (not a
+  # hardcoded default) is what makes the Settings model selection actually
+  # take effect for transcription.
+  defp active_model_path do
+    with %{id: id} <- EarWitness.Models.get_active_model(),
+         {:ok, path} <- EarWitness.Models.model_path(id) do
+      path
+    else
+      _ -> ""
+    end
   end
 end

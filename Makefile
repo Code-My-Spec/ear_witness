@@ -100,6 +100,16 @@ models/ggml-base.en.bin: $(WHISPER_DIR)/CMakeLists.txt
 	mkdir -p models
 	cp $(WHISPER_DIR)/models/ggml-base.en.bin models/
 
+# ggml Silero VAD model (not committed to git — ~865KB). Enables whisper's
+# Voice Activity Detection in transcribe.cpp (resolve_vad_model_path looks
+# for it next to the active model / under models/). When absent the NIF
+# falls back to non-VAD transcription, so this is a quality bundle, not a
+# hard build dependency. Fetched explicitly like the base model above
+# (`make models/ggml-silero-v6.2.0.bin`) — see .code_my_spec/devops/setup.md.
+models/ggml-silero-v6.2.0.bin:
+	mkdir -p models
+	curl -L -o $@ https://huggingface.co/ggml-org/whisper-vad/resolve/main/ggml-silero-v6.2.0.bin
+
 # Compile and link
 $(TARGET): $(OBJS) $(WHISPER_LIB)
 	$(CXX) $(OBJS) $(LDFLAGS) -o $(TARGET)
