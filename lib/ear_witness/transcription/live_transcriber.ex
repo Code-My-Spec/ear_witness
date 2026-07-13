@@ -103,6 +103,31 @@ defmodule EarWitness.Transcription.LiveTranscriber do
   def running?(ref), do: Registry.lookup(@registry, ref) != []
 
   @doc """
+  Synchronously drains the capture once and transcribes any ready windows,
+  returning `:ok` once the resulting segments are committed. Accepts the
+  transcriber's pid or its capture `ref`. This is the same work the periodic
+  drain timer does — exposed so a test can force it deterministically (with the
+  timer set to `:manual` and a controllable reader) rather than waiting on the
+  clock. A no-op if no transcriber is running for a given `ref`.
+  """
+  @spec flush(pid() | reference()) :: :ok
+  def flush(pid) when is_pid(pid), do: GenServer.call(pid, :flush)
+
+  def flush(ref) do
+    case Registry.lookup(@registry, ref) do
+      [{pid, _}] -> GenServer.call(pid, :flush)
+      [] -> :ok
+    end
+  end
+
+  @doc """
+  Bytes of new audio that trigger one transcription window (16kHz mono PCM16).
+  A test drain seam feeds exactly this much to produce one batch of segments.
+  """
+  @spec window_bytes() :: pos_integer()
+  def window_bytes, do: @window_samples * @bytes_per_sample
+
+  @doc """
   Stops live draining and finalizes in the background: transcribes the
   remaining backlog from the finished WAV, marks the transcript complete, then
   diarizes. Returns `:ok` immediately (story 872 rule 7). A no-op if no live
@@ -134,6 +159,12 @@ defmodule EarWitness.Transcription.LiveTranscriber do
       transcript_id: Keyword.fetch!(opts, :transcript_id),
       path: Keyword.fetch!(opts, :path),
       engine: Keyword.get(opts, :engine, configured_engine()),
+      # Drain source — the capture NIF in production; a controllable stand-in
+      # under the test seam (config :ear_witness, :capture_reader).
+      reader: Keyword.get(opts, :reader, configured_reader()),
+      # ms between periodic drains, or :manual to only drain on flush/1 (the
+      # test seam sets :manual so live streaming is deterministic).
+      drain_interval: Keyword.get(opts, :drain_interval, configured_drain_interval()),
       # PCM not yet transcribed, covering samples [pending_start_sample, next_sample).
       pending: <<>>,
       pending_start_sample: 0,
@@ -145,15 +176,20 @@ defmodule EarWitness.Transcription.LiveTranscriber do
       last_committed_end_ms: 0
     }
 
-    schedule_drain()
+    schedule_drain(state)
     {:ok, state}
   end
 
   @impl true
   def handle_info(:drain, state) do
     state = state |> drain() |> process_ready()
-    schedule_drain()
+    schedule_drain(state)
     {:noreply, state}
+  end
+
+  @impl true
+  def handle_call(:flush, _from, state) do
+    {:reply, :ok, state |> drain() |> process_ready()}
   end
 
   @impl true
@@ -164,12 +200,13 @@ defmodule EarWitness.Transcription.LiveTranscriber do
     {:stop, :normal, state}
   end
 
-  defp schedule_drain, do: Process.send_after(self(), :drain, @drain_interval_ms)
+  defp schedule_drain(%{drain_interval: :manual}), do: :ok
+  defp schedule_drain(%{drain_interval: ms}), do: Process.send_after(self(), :drain, ms)
 
   # Pull whatever the capture has produced since last time into `pending`.
   # Never lets a transient read error stall the loop — it just tries again.
   defp drain(state) do
-    case Miniaudio.read_new(state.handle) do
+    case state.reader.read_new(state.handle) do
       {:ok, pcm} when byte_size(pcm) > 0 ->
         %{
           state
@@ -317,6 +354,16 @@ defmodule EarWitness.Transcription.LiveTranscriber do
 
   defp configured_engine do
     Application.get_env(:ear_witness, :transcription_engine, Transcription.Engine)
+  end
+
+  # Drain source — the real capture NIF in production, or a controllable
+  # stand-in (implementing `read_new/1`) under the test seam.
+  defp configured_reader do
+    Application.get_env(:ear_witness, :capture_reader, Miniaudio)
+  end
+
+  defp configured_drain_interval do
+    Application.get_env(:ear_witness, :live_transcriber_drain_interval_ms, @drain_interval_ms)
   end
 
   defp samples_to_ms(samples), do: div(samples * 1000, @sample_rate)

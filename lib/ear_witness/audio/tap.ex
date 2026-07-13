@@ -25,7 +25,7 @@ defmodule EarWitness.Audio.Tap do
 
   defp default_installed? do
     case Application.get_env(:ear_witness, :capture_source) do
-      :fixture -> true
+      source when source in [:fixture, :fixture_live] -> true
       _real -> Miniaudio.loopback_available?()
     end
   end

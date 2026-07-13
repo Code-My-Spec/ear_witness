@@ -31,7 +31,7 @@ defmodule EarWitness.Audio.Pipeline do
 
   defp default_input_devices do
     case Application.get_env(:ear_witness, :capture_source) do
-      :fixture ->
+      source when source in [:fixture, :fixture_live] ->
         [%{id: :fixture_microphone, name: "Fixture Microphone"}]
 
       _real ->
@@ -72,6 +72,7 @@ defmodule EarWitness.Audio.Pipeline do
   def capture_handle(ref) do
     case Captures.get(ref) do
       %{kind: :real, capture_handle: handle} -> {:ok, handle}
+      %{kind: :test, capture_handle: handle} -> {:ok, handle}
       _ -> :error
     end
   end
@@ -91,6 +92,11 @@ defmodule EarWitness.Audio.Pipeline do
         {:ok, %{channels: channels, path: path}}
 
       %{kind: :fixture, path: path, channels: channels} ->
+        {:ok, %{channels: channels, path: path}}
+
+      # Live-transcription spec seam (see start_test/2) — its WAV was written at
+      # start and there is no device to stop, so just report the finished file.
+      %{kind: :test, path: path, channels: channels} ->
         {:ok, %{channels: channels, path: path}}
     end
   end
@@ -146,8 +152,27 @@ defmodule EarWitness.Audio.Pipeline do
   defp start(source, path) do
     case Application.get_env(:ear_witness, :capture_source) do
       :fixture -> start_fixture(source, path)
+      :fixture_live -> start_test(source, path)
       _real -> start_real(source, path)
     end
+  end
+
+  # Test-only capture backend for the live-transcription spec seam (story 872).
+  # Like `:fixture` it writes canned WAV bytes instead of touching a device, but
+  # it ALSO hands back an opaque handle so `EarWitness.Audio.capture_handle/1`
+  # reports it as a real, live-transcribable capture — that's what makes
+  # `Recordings.start_live_capture/0` actually start the `LiveTranscriber` under
+  # test (a plain `:fixture` capture has no handle and is skipped). The drain
+  # side is supplied by the configured `:capture_reader`
+  # (`EarWitnessTest.FakeCaptureReader`), which a spec pushes PCM into; `stop/1`
+  # below finalizes it without any NIF call. Only reachable when
+  # `:capture_source` is `:fixture_live`, which production never sets.
+  defp start_test(source, path) do
+    File.write!(path, fixture_wav())
+    channels = channels_for(source)
+    ref = make_ref()
+    Captures.put(ref, %{kind: :test, capture_handle: make_ref(), path: path, channels: channels})
+    {:ok, ref, channels}
   end
 
   defp start_fixture(source, path) do

@@ -44,7 +44,14 @@ config :ear_witness,
   transcription_engine: EarWitnessTest.RecordedTranscriptionEngine,
   diarizer: EarWitnessTest.RecordedDiarizer,
   capture_source: :fixture,
-  bot_relay: EarWitnessTest.PendingBotRelay
+  bot_relay: EarWitnessTest.PendingBotRelay,
+  # Live-transcription spec seam (story 872). Inert unless a spec opts into the
+  # `:fixture_live` capture (EarWitnessSpex.Fixtures.enable_live_capture_seam/0):
+  # the LiveTranscriber then drains a controllable stand-in instead of the NIF,
+  # and only advances when a spec calls `flush` (never on a timer), so live
+  # segment streaming is deterministic. See EarWitnessTest.FakeCaptureReader.
+  capture_reader: EarWitnessSpex.Fixtures.FakeCaptureReader,
+  live_transcriber_drain_interval_ms: :manual
 
 # EarWitness.Models.Downloader replays a recorded HTTP interaction instead
 # of fetching the real (multi-gigabyte) model file — see the req_cassette

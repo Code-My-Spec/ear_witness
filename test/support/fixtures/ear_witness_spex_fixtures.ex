@@ -158,6 +158,108 @@ defmodule EarWitnessSpex.Fixtures do
     __MODULE__.GatedDownloadPlug.release()
   end
 
+  # --- Live transcription (story 872) spec seam ---------------------------
+  #
+  # Fixture captures normally skip live transcription (no device handle), so
+  # these enable a deterministic, no-real-audio path: a spec drives the real
+  # Record button, pushes controllable audio that the fake engine turns into
+  # known segments, then Stop, and asserts on the rendered transcript.
+  #
+  # Usage sketch (a spec drives Record/Stop/Show through the LiveView itself):
+  #
+  #   EarWitnessSpex.Fixtures.enable_live_capture_seam()      # in given_
+  #   view |> element("button", "Record") |> render_click()  # real UI
+  #   EarWitnessSpex.Fixtures.feed_live_audio()               # -> 2 live segments
+  #   id = EarWitnessSpex.Fixtures.live_recording_id()
+  #   # ...navigate to /recordings/#{id}, assert segment text, NO speakers...
+  #   view |> element("button", "Stop") |> render_click()     # real UI
+  #   EarWitnessSpex.Fixtures.await_live_transcription_finalized(id)
+  #   # ...navigate to /recordings/#{id}, assert speaker labels now present...
+
+  @doc """
+  Switches capture to the `:fixture_live` seam for the current test: real
+  `Recordings.start_live_capture/0` now starts the `LiveTranscriber` (a fixture
+  capture is skipped), draining `#{inspect(__MODULE__)}.FakeCaptureReader`
+  instead of a device. Resets the reader queue and restores the prior capture
+  source on exit. Call once, before driving the Record button.
+  """
+  def enable_live_capture_seam do
+    previous = Application.get_env(:ear_witness, :capture_source)
+    Application.put_env(:ear_witness, :capture_source, :fixture_live)
+    __MODULE__.FakeCaptureReader.reset()
+
+    ExUnit.Callbacks.on_exit(fn ->
+      Application.put_env(:ear_witness, :capture_source, previous)
+    end)
+
+    :ok
+  end
+
+  @doc """
+  Pushes audio into the running live capture and synchronously transcribes it,
+  so the segments are on the transcript when this returns. `seconds` defaults to
+  exactly one transcription window — one batch of the fake engine's segments
+  (its default cassette: "Testing 1, 2, 3, testing." at 0-3000ms and "1, 2, 3."
+  at 3000-8000ms). The audio itself is silence; the fake engine maps window ->
+  known text deterministically regardless of content.
+  """
+  def feed_live_audio(seconds \\ nil) do
+    bytes =
+      case seconds do
+        nil -> EarWitness.Transcription.LiveTranscriber.window_bytes()
+        s -> round(s * 16_000) * 2
+      end
+
+    __MODULE__.FakeCaptureReader.push(:binary.copy(<<0>>, bytes))
+    flush_live_transcribers()
+    :ok
+  end
+
+  @doc """
+  The id of the recording the live capture created at start (the most recent
+  recording) — for navigating to `/recordings/:id` to observe live segments.
+  """
+  def live_recording_id do
+    case EarWitness.Recordings.list_recordings() do
+      [%{id: id} | _] -> id
+      [] -> nil
+    end
+  end
+
+  @doc """
+  Blocks until a stopped live recording's background finalize + diarization has
+  completed — transcript `:completed` with `diarized_at` set (speakers filled
+  in) — or the timeout elapses. Call after driving Stop, before asserting on
+  speaker labels.
+  """
+  def await_live_transcription_finalized(recording_id, timeout_ms \\ 2_000) do
+    wait_finalized(recording_id, System.monotonic_time(:millisecond) + timeout_ms)
+  end
+
+  defp wait_finalized(recording_id, deadline) do
+    case EarWitness.Transcription.get_transcript_for_recording(recording_id) do
+      {:ok, %{status: :completed, diarized_at: diarized_at}} when not is_nil(diarized_at) ->
+        :ok
+
+      _ ->
+        if System.monotonic_time(:millisecond) < deadline do
+          Process.sleep(10)
+          wait_finalized(recording_id, deadline)
+        else
+          {:error, :timeout}
+        end
+    end
+  end
+
+  defp flush_live_transcribers do
+    EarWitness.Transcription.LiveSupervisor
+    |> DynamicSupervisor.which_children()
+    |> Enum.each(fn
+      {_, pid, _, _} when is_pid(pid) -> EarWitness.Transcription.LiveTranscriber.flush(pid)
+      _ -> :ok
+    end)
+  end
+
   # A minimal, valid mono 16-bit PCM WAV file as an in-memory binary — same
   # construction as EarWitnessSpex.WavFixture.short/0, duplicated rather than
   # reused because this boundary may not dep on EarWitnessSpex (see moduledoc).
