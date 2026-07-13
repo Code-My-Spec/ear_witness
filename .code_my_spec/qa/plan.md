@@ -116,6 +116,26 @@ implemented yet; there is no MCP transport to probe. When it lands, plain
 one-shot curl will NOT work for tool calls (Anubis Streamable HTTP: `202
 Accepted` + SSE) — use an MCP-aware client, and re-probe this plan.
 
+### Vibium MCP browser tools unavailable in some QA sessions (2026-07-12)
+
+Observed during story 867 QA: `mcp__vibium__browser_*` tools (and plausible
+namespace variants) all returned "No such tool available", and `ToolSearch`
+(the documented fallback for loading a missing tool) was itself disabled
+("ToolSearch exists but is not enabled in this context"), even though
+`claude mcp list` showed the vibium server as Connected. This blocked all
+interactive browser-driven QA for that session — filed as issue
+`3063b049-e906-4897-83e3-a37dce29619a` (framework/tooling, not app). Also
+observed: filing a `scope: framework` issue itself failed with `Remote API
+returned 401: Invalid deploy key` — framework-scope issues need a deploy key
+this local session doesn't have; use `scope: app` as a fallback and note the
+framework intent in the description. If a future QA session hits the same
+"No such tool available" wall, fall back to `curl` against the
+Desktop.Auth-cookie-gated dead render (see the curl section above — this app
+has no CSRF-protected POST forms on its LiveView pages, so a GET with the
+session cookie is safe and useful for static-content verification even
+though it can't drive `phx-change`/`phx-click` interactions) and report the
+session as `partial` rather than fabricating browser evidence.
+
 ## Notes
 
 The UI at `/` is transitional: it is the inherited todo-app LiveView already

@@ -29,7 +29,6 @@ defmodule EarWitnessWeb.Router do
     live "/search", SearchLive
     live "/settings", SettingsLive
     live "/setup", SetupLive
-    live "/bots", BotLive
     live "/legacy-todo", TodoLive
   end
 end

@@ -3,8 +3,8 @@ defmodule EarWitness.Audio do
   Live audio capture infrastructure — capture-source and consent-policy
   selection, and starting/stopping capture sessions. Has no knowledge of
   recordings, files, or the library; `EarWitness.Recordings` composes this
-  context for live capture. Never joins a meeting and never depends on
-  `EarWitness.Bots` — capture reads local audio devices only.
+  context for live capture. Never joins a meeting — capture reads local
+  audio devices only.
   """
 
   import Ecto.Query

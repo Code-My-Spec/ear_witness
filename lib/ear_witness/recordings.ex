@@ -1,8 +1,8 @@
 defmodule EarWitness.Recordings do
   @moduledoc """
   The recordings library — every piece of audio the app knows about,
-  whether captured live from the microphone, imported from an external
-  file, or dropped off by a meeting bot. Owns recording metadata,
+  whether captured live from the microphone or imported from an external
+  file. Owns recording metadata,
   collection ("case/matter/meeting") grouping, and file placement.
   """
 

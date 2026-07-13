@@ -11,6 +11,8 @@ defmodule EarWitness.Recordings.Recording do
 
   schema "recordings" do
     field(:title, :string)
+    # :bot is a legacy source (the meeting-bot feature was removed); kept in
+    # the enum so any pre-existing bot-sourced rows still load.
     field(:source, Ecto.Enum, values: [:captured, :imported, :bot])
     field(:capture_source, Ecto.Enum, values: [:microphone, :system_audio_tap])
     field(:file_path, :string)
