@@ -31,18 +31,27 @@ defmodule EarWitnessWeb.SettingsLive do
             Active source: <span data-test="active-capture-source" class="font-medium">{source_label(@active_source)}</span>
           </p>
 
-          <form id="capture-source-form" data-test="capture-source-form" phx-change="select_source" class="space-y-1">
-            <label :for={source <- @capture_sources} class="flex items-center gap-2">
-              <input
-                type="radio"
-                name="source"
-                value={source_value(source.type)}
-                checked={source.type == @active_source}
-                class="radio radio-sm"
-              />
-              {source.name}
-              <span :if={!source.available} class="badge badge-ghost badge-sm">not set up</span>
-            </label>
+          <form id="capture-source-form" data-test="capture-source-form" phx-change="select_source" class="space-y-3">
+            <div
+              :for={source <- @capture_sources}
+              data-test="capture-source-option"
+              data-source={source_value(source.type)}
+            >
+              <label class="flex items-center gap-2">
+                <input
+                  type="radio"
+                  name="source"
+                  value={source_value(source.type)}
+                  checked={source.type == @active_source}
+                  class="radio radio-sm"
+                />
+                {source.name}
+                <span :if={!source.available} class="badge badge-ghost badge-sm">not set up</span>
+              </label>
+              <p data-test="capture-source-help" class="pl-6 text-sm opacity-70">
+                {source_description(source.type)}
+              </p>
+            </div>
           </form>
 
           <div :if={@tap_setup_needed} data-test="tap-setup-guide" class="alert alert-warning">
@@ -328,6 +337,17 @@ defmodule EarWitnessWeb.SettingsLive do
 
   defp source_value(:microphone), do: "microphone"
   defp source_value(:system_audio_tap), do: "tap"
+
+  defp source_description(:microphone),
+    do:
+      "Records your default microphone — your own voice and whatever else the mic " <>
+        "picks up in the room."
+
+  defp source_description(:system_audio_tap),
+    do:
+      "Records everything your computer plays out loud — both sides of a call, videos, " <>
+        "any app's sound. It taps your whole system output, so there's no single device " <>
+        "to pick; whatever you hear is what gets recorded."
 
   defp source_label(:microphone), do: "microphone"
   defp source_label(:system_audio_tap), do: "tap"
