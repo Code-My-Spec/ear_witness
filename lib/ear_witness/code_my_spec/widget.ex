@@ -18,11 +18,18 @@ defmodule EarWitness.CodeMySpec.Widget do
   The single local user of this desktop install.
 
   There is no auth scope — identity is a UUID persisted in the config dir on
-  first use, plus an optional operator-facing email from
-  `config :ear_witness, :widget_user_email`.
+  first use, plus an operator-facing email.
+
+  The email is the conversation key on the CodeMySpec side (a conversation is
+  looked up by `(account, project, email)`), so it MUST be unique per install —
+  otherwise every desktop install would collapse into one shared thread. When
+  the operator supplies a real address via `config :ear_witness,
+  :widget_user_email` we use it; otherwise we synthesize a stable,
+  install-unique address from the persisted UUID (`<uuid>@desktop.earwitness.local`).
   """
   def local_user do
-    %{id: local_user_id(), email: local_user_email()}
+    id = local_user_id()
+    %{id: id, email: local_user_email(id)}
   end
 
   defp local_user_id do
@@ -40,8 +47,8 @@ defmodule EarWitness.CodeMySpec.Widget do
     end
   end
 
-  defp local_user_email do
-    Application.get_env(:ear_witness, :widget_user_email) || "desktop-user@local"
+  defp local_user_email(id) do
+    Application.get_env(:ear_witness, :widget_user_email) || "#{id}@desktop.earwitness.local"
   end
 
   defp generate_uuid do
@@ -72,6 +79,89 @@ defmodule EarWitness.CodeMySpec.Widget do
   catch
     :exit, _ -> %{messages: []}
   end
+
+  @doc """
+  Best-effort registration of this install as an `external_user` on CodeMySpec.
+
+  Chat and issue reporting do NOT depend on this — the conversation is created
+  on the fly at join time. This purely populates CodeMySpec's durable user
+  roster (with platform/version metadata) so support has context. Fired once
+  when the widget client starts; failures are logged and swallowed so a
+  down/unreachable CodeMySpec never affects the local app.
+
+  POSTs `{"user": {email, external_id, name, metadata}}` to the widget REST
+  scope with the project deploy key as a Bearer token — same auth as the
+  outbound Slipstream socket, still outbound-only.
+  """
+  def register_user do
+    deploy_key = Application.get_env(:ear_witness, :deploy_key)
+    base = Application.get_env(:ear_witness, :codemyspec_widget_url)
+
+    if present?(deploy_key) and present?(base) do
+      user = local_user()
+
+      body = %{
+        user: %{
+          email: user.email,
+          external_id: user.id,
+          name: "EarWitness Desktop",
+          metadata: install_metadata()
+        }
+      }
+
+      Req.post(api_users_url(base),
+        headers: [{"authorization", "Bearer #{deploy_key}"}],
+        json: body,
+        retry: false,
+        receive_timeout: 5_000
+      )
+      |> case do
+        {:ok, %{status: status}} when status in 200..299 -> :ok
+        {:ok, %{status: status}} -> {:error, {:http_status, status}}
+        {:error, reason} -> {:error, reason}
+      end
+    else
+      {:error, :not_configured}
+    end
+  end
+
+  defp install_metadata do
+    %{
+      platform: platform(),
+      app_version: to_string(Application.spec(:ear_witness, :vsn))
+    }
+  end
+
+  defp platform do
+    case :os.type() do
+      {:unix, :darwin} -> "macos"
+      {:win32, _} -> "windows"
+      {:unix, _} -> "linux"
+      _ -> "unknown"
+    end
+  end
+
+  # Derive the widget REST origin from the (websocket) widget URL:
+  # wss://host[:port]/widget -> https://host[:port]/api/widget/users
+  defp api_users_url(base) do
+    uri = URI.parse(base)
+
+    scheme =
+      case uri.scheme do
+        "wss" -> "https"
+        "ws" -> "http"
+        other -> other
+      end
+
+    port_part =
+      if uri.port && uri.port not in [80, 443], do: ":#{uri.port}", else: ""
+
+    "#{scheme}://#{uri.host}#{port_part}/api/widget/users"
+  end
+
+  defp present?(nil), do: false
+  defp present?(""), do: false
+  defp present?(_), do: true
 
   def send_message(user_id, body), do: cast(user_id, {:send_message, body})
   def load_older(user_id, before), do: cast(user_id, {:load_older, before})

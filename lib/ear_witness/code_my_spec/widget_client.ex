@@ -27,6 +27,16 @@ defmodule EarWitness.CodeMySpec.WidgetClient do
 
     case build_uri(user_id, user_email) do
       {:ok, uri} ->
+        # Best-effort: register this install in CodeMySpec's user roster.
+        # Detached + swallowed so a down CodeMySpec never blocks the connect
+        # (chat/issues don't depend on the upsert succeeding).
+        Task.start(fn ->
+          case Widget.register_user() do
+            :ok -> :ok
+            other -> Logger.info("[WidgetClient] external-user upsert skipped: #{inspect(other)}")
+          end
+        end)
+
         socket =
           new_socket()
           |> assign(:user_id, user_id)
