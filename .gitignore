@@ -67,6 +67,8 @@ npm-debug.log
 
 # Secrets — real values live here, never committed (varlock integration planned)
 .env
+# Local dev secrets (deploy key etc.) imported by config/dev.exs
+config/*.secret.exs
 # Claude Code local state
 .claude/settings.local.json
 .claude/scheduled_tasks.lock

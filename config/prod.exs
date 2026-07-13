@@ -19,3 +19,21 @@ config :logger, :console, format: "[$level] $message\n"
 # Set a higher stacktrace during development. Avoid configuring such
 # in production as building large stacktraces may be expensive.
 config :phoenix, :stacktrace_depth, 20
+
+# CodeMySpec widget deploy key, baked into the release at BUILD time.
+#
+# A desktop release runs runtime.exs on the *user's* machine, where DEPLOY_KEY
+# is never set — so the key can't be a runtime env var. Instead the release
+# build (GitHub Actions `mix desktop.installer`, MIX_ENV=prod) reads DEPLOY_KEY
+# from the CI secret at compile time and freezes it into the artifact here.
+# Guarded so a build without the secret bakes nothing (rather than nil), and
+# never overrides an explicit runtime.exs env value.
+#
+# This is a SHARED per-project secret embedded in a distributed binary: it is
+# extractable by anyone with the app. Acceptable because its only power is the
+# widget scope (upsert external_users, open conversations, submit feedback) —
+# blast radius is support-channel spam, mitigated server-side by rate limiting
+# and key rotation. See the support-widget ADR.
+if deploy_key = System.get_env("DEPLOY_KEY") do
+  config :ear_witness, :deploy_key, deploy_key
+end

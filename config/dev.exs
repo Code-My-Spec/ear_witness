@@ -34,3 +34,10 @@ config :phoenix, :stacktrace_depth, 20
 
 # Initialize plugs at runtime for faster development compilation
 config :phoenix, :plug_init_mode, :runtime
+
+# Local, gitignored dev secrets (e.g. the CodeMySpec widget :deploy_key for
+# local issue reporting). Create config/dev.secret.exs to enable the widget in
+# dev; it's matched by config/*.secret.exs in .gitignore and never committed.
+if File.exists?("config/dev.secret.exs") do
+  import_config "dev.secret.exs"
+end

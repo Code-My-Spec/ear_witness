@@ -74,6 +74,9 @@ jobs:
         shell: pwsh
         env:
           MIX_ENV: prod
+          # Baked into the release at compile time by config/prod.exs so the
+          # support widget can connect from shipped installs.
+          DEPLOY_KEY: ${{ secrets.DEPLOY_KEY }}
         run: |
           mix local.hex --force
           mix local.rebar --force

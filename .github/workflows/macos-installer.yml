@@ -122,6 +122,10 @@ jobs:
           echo "wx driver present: $driver"
 
       - name: Build release + installer
+        env:
+          # Baked into the release at compile time by config/prod.exs so the
+          # support widget can connect from shipped installs.
+          DEPLOY_KEY: ${{ secrets.DEPLOY_KEY }}
         run: |
           set -euo pipefail
           . "$HOME/.asdf/asdf.sh"
