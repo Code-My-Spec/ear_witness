@@ -60,17 +60,15 @@ defmodule EarWitnessSpex.TranscriptSteps do
   end
 
   @doc """
-  Submits a corrected transcript text for the segment identified by
-  `segment_id`, through its inline editor form
+  Corrects a segment's transcript text through its inline editor input
   (`[data-test="segment-editor"][data-segment-id="..."]`, story 863
-  criterion 7345). Returns the rendered HTML after the edit.
+  criterion 7345), which saves on blur — no Save button. Returns the
+  rendered HTML after the edit.
   """
   def edit_segment_text(view, segment_id, corrected_text) do
     view
-    |> form(~s([data-test="segment-editor"][data-segment-id="#{segment_id}"]), %{
-      "segment" => %{"text" => corrected_text}
-    })
-    |> render_submit()
+    |> element(~s([data-test="segment-editor"][data-segment-id="#{segment_id}"]))
+    |> render_blur(%{"value" => corrected_text})
   end
 
   @doc """

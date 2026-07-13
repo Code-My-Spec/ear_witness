@@ -47,73 +47,77 @@ defmodule EarWitnessWeb.TranscriptLive.Editor do
           phx-click="play_segment"
           phx-value-id={segment.id}
           class={[
-            "card card-body cursor-pointer gap-2 border bg-base-100 text-base leading-relaxed shadow-sm transition-colors",
-            (segment.id == @focused_segment_id && "border-primary ring ring-primary/30") ||
-              "border-base-300",
-            segment.id == @playing_segment_id && "bg-primary/5"
+            "group relative cursor-pointer rounded-lg py-2 pl-36 pr-3 leading-relaxed transition-colors hover:bg-base-200/50",
+            segment.id == @focused_segment_id && "bg-primary/5",
+            segment.id == @playing_segment_id && "bg-accent/10"
           ]}
         >
           {segment.text}
           <span :if={segment.id == @focused_segment_id} data-test="focused-segment" class="hidden">
             {segment.text}
           </span>
-          <span
-            :if={segment.id == @playing_segment_id}
-            data-test="playing-segment"
-            class="badge badge-accent badge-sm w-fit gap-1"
-          >
-            <.icon name="hero-play-circle" class="size-3.5" /> Playing
-          </span>
+          <%!--
+            Bare `{segment.text}` above stays the FIRST, unwrapped child of
+            `transcript-segment` — many specs resolve a segment's id + text by
+            scanning `data-test="transcript-segment" data-segment-id="..."` and
+            reading the tag's own bare text. The editable field below carries
+            the same text and saves on blur.
+          --%>
+          <input
+            type="text"
+            name="segment[text]"
+            data-test="segment-editor"
+            data-segment-id={segment.id}
+            value={segment.text}
+            phx-blur="edit_segment_text"
+            phx-value-id={segment.id}
+            onclick="event.stopPropagation()"
+            class="input input-ghost mt-0.5 h-auto w-full px-1 py-0.5 text-base leading-relaxed focus:input-bordered"
+          />
 
-          <div class="flex flex-wrap items-center gap-2 text-sm opacity-70">
-            <span data-test="segment-timestamp" class="tnum">
-              {Format.duration(segment.start_offset / 1000)}
-            </span>
+          <div
+            class="absolute left-3 top-2 flex w-28 flex-col gap-0.5"
+            onclick="event.stopPropagation()"
+          >
             <span
               data-test="segment-speaker"
               data-segment-id={segment.id}
-              class="badge badge-ghost badge-sm"
+              class="text-sm font-semibold leading-tight text-primary"
             >
               {@speaker_labels[segment.id]}
             </span>
-          </div>
-
-          <form
-            id={"segment-editor-#{segment.id}"}
-            data-test="segment-editor"
-            data-segment-id={segment.id}
-            phx-submit="edit_segment_text"
-            phx-value-id={segment.id}
-            onclick="event.stopPropagation()"
-            class="flex items-center gap-2"
-          >
-            <input
-              type="text"
-              name="segment[text]"
-              value={segment.text}
-              class="input input-bordered input-sm flex-1"
-            />
-            <button type="submit" class="btn btn-sm">Save</button>
-          </form>
-
-          <form
-            id={"segment-speaker-form-#{segment.id}"}
-            data-test="segment-speaker-form"
-            data-segment-id={segment.id}
-            phx-change="reassign_segment_speaker"
-            phx-value-id={segment.id}
-            onclick="event.stopPropagation()"
-          >
-            <select name="segment[speaker_id]" class="select select-bordered select-sm">
-              <option
-                :for={{speaker, index} <- Enum.with_index(@speakers)}
-                value={speaker.id}
-                selected={speaker.id == segment.speaker_id}
+            <form
+              id={"segment-speaker-form-#{segment.id}"}
+              data-test="segment-speaker-form"
+              data-segment-id={segment.id}
+              phx-change="reassign_segment_speaker"
+              phx-value-id={segment.id}
+            >
+              <select
+                name="segment[speaker_id]"
+                aria-label="Reassign speaker"
+                class="select select-ghost select-xs w-full px-0 text-xs opacity-50 hover:opacity-100"
               >
-                {Speakers.label(speaker, index)}
-              </option>
-            </select>
-          </form>
+                <option
+                  :for={{speaker, index} <- Enum.with_index(@speakers)}
+                  value={speaker.id}
+                  selected={speaker.id == segment.speaker_id}
+                >
+                  {Speakers.label(speaker, index)}
+                </option>
+              </select>
+            </form>
+            <span data-test="segment-timestamp" class="tnum pl-1 text-xs opacity-50">
+              {Format.duration(segment.start_offset / 1000)}
+            </span>
+            <span
+              :if={segment.id == @playing_segment_id}
+              data-test="playing-segment"
+              class="badge badge-accent badge-xs ml-1 w-fit gap-1"
+            >
+              <.icon name="hero-play-circle" class="size-3" /> Playing
+            </span>
+          </div>
 
           <button
             type="button"
@@ -121,9 +125,10 @@ defmodule EarWitnessWeb.TranscriptLive.Editor do
             data-segment-id={segment.id}
             phx-click="revert_segment"
             phx-value-id={segment.id}
-            class="btn btn-sm btn-ghost self-start"
+            onclick="event.stopPropagation()"
+            class="mt-0.5 text-xs text-base-content/50 opacity-0 transition-opacity hover:text-base-content group-hover:opacity-100"
           >
-            <.icon name="hero-arrow-uturn-left" class="size-3.5" /> Revert to original
+            <.icon name="hero-arrow-uturn-left" class="size-3" /> Revert to original
           </button>
         </div>
       </div>
@@ -155,7 +160,9 @@ defmodule EarWitnessWeb.TranscriptLive.Editor do
     {:noreply, assign(socket, :playing_segment_id, String.to_integer(id))}
   end
 
-  def handle_event("edit_segment_text", %{"id" => id, "segment" => %{"text" => text}}, socket) do
+  # Saved on blur (no Save button) — phx-blur delivers the field value as
+  # "value" rather than a nested form param.
+  def handle_event("edit_segment_text", %{"id" => id, "value" => text}, socket) do
     {:ok, _segment} = Transcription.update_segment_text(String.to_integer(id), text)
     {:noreply, load_transcript(socket)}
   end
