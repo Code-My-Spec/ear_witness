@@ -9,6 +9,7 @@ defmodule EarWitnessWeb.RecordingLive.Index do
 
   alias EarWitness.Recordings
   alias EarWitness.Recordings.Collection
+  alias EarWitness.Transcription
   alias EarWitnessWeb.RecordingLive.Format
 
   @impl true
@@ -59,6 +60,39 @@ defmodule EarWitnessWeb.RecordingLive.Index do
               <button type="button" class="btn" phx-click="stop" disabled={!@capturing?}>
                 <.icon name="hero-stop" class="size-4" /> Stop
               </button>
+            </div>
+          </div>
+        </div>
+
+        <div
+          :if={@live_recording_id}
+          data-test="live-transcript"
+          class="card bg-base-100 border border-base-300 shadow-sm"
+        >
+          <div class="card-body">
+            <h2 class="card-title">
+              <span :if={@capturing?} class="loading loading-spinner loading-xs"></span>
+              Live transcript
+            </h2>
+            <p
+              :if={@live_segments == []}
+              data-test="live-transcript-empty"
+              class="text-sm opacity-70"
+            >
+              Listening… transcript segments appear here as they're recognized.
+            </p>
+            <div class="space-y-1">
+              <div
+                :for={segment <- @live_segments}
+                data-test="live-segment"
+                data-segment-id={segment.id}
+                class="flex flex-wrap items-baseline gap-2"
+              >
+                <span class="tnum text-xs opacity-60">
+                  {Format.duration(segment.start_offset / 1000)}
+                </span>
+                <span>{segment.text}</span>
+              </div>
             </div>
           </div>
         </div>
@@ -239,7 +273,9 @@ defmodule EarWitnessWeb.RecordingLive.Index do
        capturing?: false,
        capture_ref: nil,
        capture_channels: nil,
-       capture_notice: nil
+       capture_notice: nil,
+       live_recording_id: nil,
+       live_segments: []
      )
      |> reload_library()
      |> allow_upload(:audio_file, accept: ~w(.wav), max_entries: 1)}
@@ -316,15 +352,39 @@ defmodule EarWitnessWeb.RecordingLive.Index do
     end
   end
 
+  @impl true
+  def handle_info({:transcription_status, _status}, socket) do
+    # Live transcript advanced (a new batch of segments, completion, or
+    # diarization) — re-fetch and re-render the streaming segment list.
+    segments =
+      with id when not is_nil(id) <- socket.assigns.live_recording_id,
+           {:ok, transcript} <- Transcription.get_transcript_for_recording(id) do
+        transcript.segments
+      else
+        _ -> socket.assigns.live_segments
+      end
+
+    {:noreply, assign(socket, :live_segments, segments)}
+  end
+
+  def handle_info(_msg, socket), do: {:noreply, socket}
+
   defp handle_record(socket) do
     case Recordings.start_live_capture() do
-      {:ok, %{ref: ref, channels: channels, notice: notice}} ->
+      {:ok, %{ref: ref, channels: channels, notice: notice, recording_id: recording_id}} ->
+        # A real device-backed capture streams a live transcript (story 872);
+        # subscribe so segments render as they're transcribed. recording_id is
+        # nil for a fixture capture, which has no live transcription.
+        if recording_id, do: Transcription.subscribe(recording_id)
+
         assign(socket,
           capture_ref: ref,
           capturing?: true,
           capture_channels: channels,
           capture_notice: notice,
-          capture_error: nil
+          capture_error: nil,
+          live_recording_id: recording_id,
+          live_segments: []
         )
 
       {:error, :no_input_device} ->

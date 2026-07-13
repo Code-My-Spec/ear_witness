@@ -11,5 +11,7 @@ defmodule EarWitness.Audio.Captures do
 
   def put(ref, capture), do: Agent.update(__MODULE__, &Map.put(&1, ref, capture))
 
+  def get(ref), do: Agent.get(__MODULE__, &Map.get(&1, ref))
+
   def pop(ref), do: Agent.get_and_update(__MODULE__, &Map.pop(&1, ref))
 end

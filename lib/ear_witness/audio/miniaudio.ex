@@ -82,6 +82,21 @@ defmodule EarWitness.Audio.Miniaudio do
   @spec stop_capture(term()) :: :ok | {:error, atom()}
   def stop_capture(_handle), do: :erlang.nif_error(:nif_library_not_loaded)
 
+  @doc """
+  Drains the audio captured since the previous call for a running capture
+  `handle`, as a binary of little-endian PCM16 bytes (16kHz mono — the same
+  layout `stop_capture/1` writes to the WAV). Returns `{:ok, <<>>}` when no new
+  audio has arrived yet. Purely additive to the capture path: it never touches
+  the samples `stop_capture/1` finalizes, so the WAV is unchanged. Backs
+  `EarWitness.Transcription.LiveTranscriber`, which polls it to transcribe an
+  in-progress capture live (the WAV file is empty until stop).
+
+  Like the other explicit-action functions, the not-loaded stub raises rather
+  than returning a concrete `{:error, _}` (see `load_nif/0`).
+  """
+  @spec read_new(term()) :: {:ok, binary()} | {:error, atom()}
+  def read_new(_handle), do: :erlang.nif_error(:nif_library_not_loaded)
+
   @doc "Whether system-output loopback capture is available on this machine."
   @spec loopback_available?() :: boolean()
   def loopback_available?, do: false

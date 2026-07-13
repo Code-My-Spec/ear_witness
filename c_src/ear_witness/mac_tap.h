@@ -11,6 +11,8 @@
 #define EAR_WITNESS_MAC_TAP_H
 
 #include <stdbool.h>
+#include <stddef.h>
+#include <stdint.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -28,6 +30,15 @@ void *ew_mac_tap_start(const char *path);
 // frees the handle. Returns 0 on success, -1 if the WAV write failed (the
 // handle is still torn down and freed either way).
 int ew_mac_tap_stop(void *handle);
+
+// Copies the samples accumulated since the last read out of the tap's buffer
+// into a freshly malloc'd array (16kHz mono s16, little-endian) which the
+// caller takes ownership of and must free(). *out_count is the number of
+// int16 samples — 0 (with *out_samples left NULL) when nothing new has
+// arrived. Returns true on success. Lets the live transcriber drain an
+// in-progress tap capture the same way capture_read_new/1 drains a miniaudio
+// one; safe to call any time between start and stop.
+bool ew_mac_tap_read_new(void *handle, int16_t **out_samples, size_t *out_count);
 
 // Tears down the Core Audio objects and frees the handle WITHOUT writing a
 // WAV — the discard path (used by the resource destructor if a capture is

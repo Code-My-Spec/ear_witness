@@ -125,6 +125,24 @@ defmodule EarWitness.Audio do
     end
   end
 
+  @doc """
+  Returns the opaque native capture handle for a running capture `ref`, or
+  `nil` when there is none (an unknown `ref`, or a `:fixture`-seam capture that
+  has no real device behind it). This is the seam
+  `EarWitness.Transcription.LiveTranscriber` drains via
+  `EarWitness.Audio.Miniaudio.read_new/1` to transcribe an in-progress capture
+  live — a real device-backed capture is exactly the one that has a handle, so
+  a `nil` here is also how the recordings layer tells a real capture from a
+  fixture one without knowing the seam config.
+  """
+  @spec capture_handle(reference()) :: term() | nil
+  def capture_handle(ref) do
+    case Pipeline.capture_handle(ref) do
+      {:ok, handle} -> handle
+      :error -> nil
+    end
+  end
+
   @doc "Subscribes the caller to live input-level updates for a running capture."
   @spec subscribe_levels(reference()) :: :ok
   def subscribe_levels(ref) do

@@ -12,6 +12,8 @@ defmodule EarWitness.Recordings do
   alias EarWitness.Recordings.{Collection, Importer, Recording, WavHeader}
   alias EarWitness.Repo
   alias EarWitness.Search
+  alias EarWitness.Transcription
+  alias EarWitness.Transcription.LiveTranscriber
 
   @doc "Validates, copies, and registers an externally-sourced audio file as a new recording."
   @spec import_recording(Path.t(), String.t()) ::
@@ -227,14 +229,63 @@ defmodule EarWitness.Recordings do
   files.
   """
   @spec start_live_capture() ::
-          {:ok, %{ref: reference(), path: Path.t(), channels: [atom()], notice: atom()}}
+          {:ok,
+           %{
+             ref: reference(),
+             path: Path.t(),
+             channels: [atom()],
+             notice: atom(),
+             recording_id: integer() | nil
+           }}
           | {:error, atom()}
   def start_live_capture do
     path = Path.join(EarWitness.recordings_dir(), Ecto.UUID.generate() <> ".wav")
 
     case Audio.start_capture(path) do
-      {:ok, capture} -> {:ok, Map.put(capture, :path, path)}
-      {:error, reason} -> {:error, reason}
+      {:ok, capture} ->
+        capture = Map.put(capture, :path, path)
+        # nil for a fixture capture (no live transcription); the recording id
+        # for a real one, so the UI can subscribe and stream live segments.
+        recording_id = maybe_start_live_transcription(capture)
+        {:ok, Map.put(capture, :recording_id, recording_id)}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  # A real device-backed capture is the one that has a native handle (a
+  # `:fixture`-seam capture returns nil — see `Audio.capture_handle/1`). For
+  # those, register the recording + a live transcript up front and start the
+  # live transcriber, so segments stream into the transcript during capture
+  # (story 872). Fixture captures keep the create-on-stop path below untouched.
+  defp maybe_start_live_transcription(%{ref: ref, channels: channels, path: path}) do
+    case Audio.capture_handle(ref) do
+      nil ->
+        nil
+
+      handle ->
+        {:ok, recording} =
+          create_recording(%{
+            title: Path.basename(path),
+            source: :captured,
+            capture_source: capture_source_for(channels),
+            file_path: path,
+            duration: 0.0
+          })
+
+        {:ok, transcript} = Transcription.create_live_transcript(recording.id)
+
+        {:ok, _pid} =
+          LiveTranscriber.start(
+            ref: ref,
+            handle: handle,
+            recording_id: recording.id,
+            transcript_id: transcript.id,
+            path: path
+          )
+
+        recording.id
     end
   end
 
@@ -245,15 +296,34 @@ defmodule EarWitness.Recordings do
     with {:ok, %{channels: channels, path: path}} <- Audio.stop_capture(ref),
          {:ok, bytes} <- File.read(path),
          {:ok, header} <- WavHeader.parse(bytes) do
-      case create_recording(%{
-             title: Path.basename(path),
-             source: :captured,
-             capture_source: capture_source_for(channels),
-             file_path: path,
-             duration: header.duration_seconds
-           }) do
-        {:ok, recording} -> {:ok, recording, channels}
-        error -> error
+      case Repo.get_by(Recording, file_path: path) do
+        nil ->
+          # No live transcription ran (a `:fixture` capture, or one without a
+          # device handle) — register the finished file as a new recording, as
+          # before.
+          case create_recording(%{
+                 title: Path.basename(path),
+                 source: :captured,
+                 capture_source: capture_source_for(channels),
+                 file_path: path,
+                 duration: header.duration_seconds
+               }) do
+            {:ok, recording} -> {:ok, recording, channels}
+            error -> error
+          end
+
+        %Recording{} = recording ->
+          # Live path: the recording + transcript already exist and segments
+          # streamed in during capture. Set the true duration, then let the live
+          # transcriber finish the backlog + diarization in the background — this
+          # returns immediately (story 872 rule 7).
+          {:ok, recording} =
+            recording
+            |> Ecto.Changeset.change(duration: header.duration_seconds)
+            |> Repo.update()
+
+          LiveTranscriber.finalize(ref)
+          {:ok, recording, channels}
       end
     else
       _ -> {:error, :invalid_audio_file}

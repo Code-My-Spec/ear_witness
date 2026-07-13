@@ -43,6 +43,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <mutex>
 #include <new>
@@ -61,6 +62,10 @@ struct CaptureState {
   ma_device device{};
   std::mutex mutex;
   std::vector<ma_int16> samples;
+  // Count of samples already handed out by capture_read_new/1 — the live
+  // transcriber's drain cursor. Only advanced under `mutex`; never rewinds
+  // `samples`, so stop_capture/1 still writes the identical full WAV.
+  size_t read_cursor = 0;
   std::string path;
   bool device_initialized = false;
   // Non-null when this capture is a macOS Core Audio process tap rather than a
@@ -533,6 +538,58 @@ static ERL_NIF_TERM nif_stop_capture(ErlNifEnv *env, int argc, const ERL_NIF_TER
   return enif_make_atom(env, "ok");
 }
 
+// Drains the samples captured since the last call into a fresh binary of
+// little-endian PCM16 bytes (the same layout stop_capture/1 writes to the
+// WAV), advancing the capture's read cursor. Returns {:ok, <<>>} when nothing
+// new has arrived. Additive to the capture path — it never mutates
+// state->samples, so stop_capture/1 still finalizes the identical full WAV.
+// This is how EarWitness.Transcription.LiveTranscriber pulls audio out of an
+// in-progress capture (the WAV file itself is empty until stop). Runs on a
+// normal scheduler: it only takes the capture mutex briefly and memcpys a
+// short window (~a second or two of 16kHz mono at most).
+static ERL_NIF_TERM nif_capture_read_new(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[]) {
+  (void)argc;
+
+  CaptureState *state;
+  if (!enif_get_resource(env, argv[0], g_capture_resource_type, reinterpret_cast<void **>(&state))) {
+    return enif_make_badarg(env);
+  }
+
+#ifdef __APPLE__
+  // macOS system-output tap: its samples live in the tap's own buffer, not
+  // state->samples, so drain them through the tap's C interface (mirroring how
+  // stop_capture/1 routes to ew_mac_tap_stop). A null handle (already stopped)
+  // simply yields nothing new.
+  if (state->mac_tap_handle != nullptr) {
+    int16_t *tap_samples = nullptr;
+    size_t tap_count = 0;
+    if (!ew_mac_tap_read_new(state->mac_tap_handle, &tap_samples, &tap_count)) {
+      return make_error(env, "read_failed");
+    }
+    ERL_NIF_TERM bin_term;
+    unsigned char *buffer = enif_make_new_binary(env, tap_count * sizeof(int16_t), &bin_term);
+    if (tap_count > 0) {
+      std::memcpy(buffer, tap_samples, tap_count * sizeof(int16_t));
+    }
+    std::free(tap_samples);
+    return make_ok(env, bin_term);
+  }
+#endif
+
+  std::lock_guard<std::mutex> lock(state->mutex);
+  size_t total = state->samples.size();
+  size_t new_count = state->read_cursor < total ? total - state->read_cursor : 0;
+  size_t byte_len = new_count * sizeof(ma_int16);
+
+  ERL_NIF_TERM bin_term;
+  unsigned char *buffer = enif_make_new_binary(env, byte_len, &bin_term);
+  if (new_count > 0) {
+    std::memcpy(buffer, state->samples.data() + state->read_cursor, byte_len);
+    state->read_cursor = total;
+  }
+  return make_ok(env, bin_term);
+}
+
 static ERL_NIF_TERM nif_loopback_available(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[]) {
   (void)argc;
   (void)argv;
@@ -686,6 +743,7 @@ static ErlNifFunc nif_funcs[] = {
     {"start_capture", 2, nif_start_capture},
     {"start_loopback_capture", 1, nif_start_loopback_capture},
     {"stop_capture", 1, nif_stop_capture},
+    {"read_new", 1, nif_capture_read_new},
     {"loopback_available?", 0, nif_loopback_available},
     // Dirty IO-bound: play_wav blocks on a condition variable until the whole
     // file has rendered, so it must not run on a normal scheduler.

@@ -31,6 +31,9 @@
 
 #include <unistd.h>
 
+#include <cstdint>
+#include <cstdlib>
+#include <cstring>
 #include <mutex>
 #include <string>
 #include <vector>
@@ -67,6 +70,7 @@ struct MacTapCapture {
 
   std::mutex mutex;               // guards `samples` across RT thread + stop
   std::vector<ma_int16> samples;  // accumulated 16kHz mono s16
+  size_t read_cursor = 0;         // samples already drained by ew_mac_tap_read_new
 
   // Preallocated conversion scratch, sized once at start so the real-time
   // IOProc never allocates for it. Grown only in the (not expected) case a
@@ -308,6 +312,34 @@ int ew_mac_tap_stop(void *handle) {
 
   destroy_capture(cap);
   return wrote ? 0 : -1;
+}
+
+bool ew_mac_tap_read_new(void *handle, int16_t **out_samples, size_t *out_count) {
+  auto *cap = static_cast<MacTapCapture *>(handle);
+  if (cap == nullptr || out_samples == nullptr || out_count == nullptr) {
+    return false;
+  }
+
+  *out_samples = nullptr;
+  *out_count = 0;
+
+  std::lock_guard<std::mutex> lock(cap->mutex);
+  size_t total = cap->samples.size();
+  if (cap->read_cursor >= total) {
+    return true;  // nothing new
+  }
+
+  size_t new_count = total - cap->read_cursor;
+  auto *buffer = static_cast<int16_t *>(std::malloc(new_count * sizeof(int16_t)));
+  if (buffer == nullptr) {
+    return false;
+  }
+
+  std::memcpy(buffer, cap->samples.data() + cap->read_cursor, new_count * sizeof(int16_t));
+  cap->read_cursor = total;
+  *out_samples = buffer;
+  *out_count = new_count;
+  return true;
 }
 
 void ew_mac_tap_free(void *handle) {

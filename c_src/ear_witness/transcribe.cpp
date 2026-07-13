@@ -312,6 +312,34 @@ bool is_file_exist(const std::string &filename)
   return infile.good();
 }
 
+static uint16_t rd_u16le(const uint8_t *p)
+{
+  return static_cast<uint16_t>(p[0]) | (static_cast<uint16_t>(p[1]) << 8);
+}
+
+static uint32_t rd_u32le(const uint8_t *p)
+{
+  return static_cast<uint32_t>(p[0]) | (static_cast<uint32_t>(p[1]) << 8) |
+         (static_cast<uint32_t>(p[2]) << 16) | (static_cast<uint32_t>(p[3]) << 24);
+}
+
+// Reads an audio file into mono 16kHz f32 samples for whisper. Two input
+// formats are accepted:
+//
+//   1. A RIFF/WAVE 16-bit PCM file — what EarWitness's capture and import paths
+//      actually produce (ear_witness::write_wav_s16, 16kHz mono; miniaudio and
+//      the macOS tap both finalize this). `recording.file_path` is always one
+//      of these, so the batch/import transcription path (Transcription.Worker)
+//      lands here. The header is parsed and the PCM16 payload converted to
+//      float; a non-mono file is downmixed by averaging channels.
+//   2. Raw little-endian 32-bit PCM (no header) — the `.raw` fixtures the
+//      transcription cassettes are recorded from (see
+//      EarWitnessTest.RecordedTranscriptionEngine), which call this NIF
+//      directly. Kept as a fallback so that path is undisturbed.
+//
+// Before this dual-format handling a WAV was read as raw int32 (header + PCM16
+// payload reinterpreted as 32-bit samples), which transcribed every captured/
+// imported recording to garbage — masked in tests by the fake cassette engine.
 bool read_pcm(const std::string &fname, std::vector<float> &pcmf32)
 {
   std::ifstream infile(fname, std::ios::binary);
@@ -321,7 +349,6 @@ bool read_pcm(const std::string &fname, std::vector<float> &pcmf32)
     return false;
   }
 
-  // Read the raw PCM data
   infile.seekg(0, std::ios::end);
   size_t file_size = infile.tellg();
   infile.seekg(0, std::ios::beg);
@@ -330,6 +357,72 @@ bool read_pcm(const std::string &fname, std::vector<float> &pcmf32)
   infile.read(reinterpret_cast<char *>(buffer.data()), file_size);
   infile.close();
 
+  // --- RIFF/WAVE 16-bit PCM ------------------------------------------------
+  if (file_size >= 44 && std::memcmp(buffer.data(), "RIFF", 4) == 0 &&
+      std::memcmp(buffer.data() + 8, "WAVE", 4) == 0)
+  {
+    uint16_t audio_format = 0, num_channels = 0, bits_per_sample = 0;
+    const uint8_t *data_ptr = nullptr;
+    size_t data_len = 0;
+
+    // Walk the chunk list for "fmt " and "data" (order/other chunks tolerated).
+    size_t pos = 12;
+    while (pos + 8 <= file_size)
+    {
+      const uint8_t *chunk_id = buffer.data() + pos;
+      uint32_t chunk_size = rd_u32le(buffer.data() + pos + 4);
+      size_t body = pos + 8;
+      // Clamp an overlong declared size to the bytes actually present (a
+      // capture killed mid-finalize can leave data_size overshooting the file).
+      if (chunk_size > file_size - body)
+      {
+        chunk_size = static_cast<uint32_t>(file_size - body);
+      }
+      const uint8_t *body_ptr = buffer.data() + body;
+
+      if (std::memcmp(chunk_id, "fmt ", 4) == 0 && chunk_size >= 16)
+      {
+        audio_format = rd_u16le(body_ptr + 0);
+        num_channels = rd_u16le(body_ptr + 2);
+        bits_per_sample = rd_u16le(body_ptr + 14);
+      }
+      else if (std::memcmp(chunk_id, "data", 4) == 0)
+      {
+        data_ptr = body_ptr;
+        data_len = chunk_size;
+      }
+
+      pos = body + chunk_size + (chunk_size & 1); // chunks are word-aligned
+    }
+
+    if (data_ptr == nullptr || num_channels == 0)
+    {
+      std::cerr << "error: WAV file missing fmt/data chunk" << std::endl;
+      return false;
+    }
+    if (audio_format != 1 || bits_per_sample != 16)
+    {
+      std::cerr << "error: unsupported WAV (expected 16-bit PCM, got format=" << audio_format
+                << " bits=" << bits_per_sample << ")" << std::endl;
+      return false;
+    }
+
+    size_t frame_bytes = static_cast<size_t>(num_channels) * 2;
+    size_t num_frames = data_len / frame_bytes;
+    pcmf32.resize(num_frames);
+    for (size_t f = 0; f < num_frames; ++f)
+    {
+      int32_t acc = 0;
+      for (uint16_t c = 0; c < num_channels; ++c)
+      {
+        acc += static_cast<int16_t>(rd_u16le(data_ptr + (f * num_channels + c) * 2));
+      }
+      pcmf32[f] = (acc / static_cast<float>(num_channels)) / 32768.0f;
+    }
+    return true;
+  }
+
+  // --- raw little-endian 32-bit PCM (headerless .raw fixtures) --------------
   if (file_size % 4 != 0)
   {
     std::cerr << "error: file size is not a multiple of 4 bytes, which is unexpected for 32-bit PCM data" << std::endl;

@@ -62,6 +62,68 @@ defmodule EarWitness.Transcription do
   end
 
   @doc """
+  Broadcasts a `{:transcription_status, status}` message to `subscribe/1`
+  listeners for a recording — the same shape the Oban worker emits, so the
+  recording view re-renders identically whether transcription ran in the
+  background or streamed in live.
+  """
+  @spec broadcast_status(integer(), atom()) :: :ok
+  def broadcast_status(recording_id, status) do
+    Phoenix.PubSub.broadcast(
+      EarWitness.PubSub,
+      topic(recording_id),
+      {:transcription_status, status}
+    )
+  end
+
+  @doc """
+  Creates the transcript row for a live capture in the `:transcribing` state.
+  `EarWitness.Transcription.LiveTranscriber` appends segments to it as the
+  capture is transcribed in real time; it moves to `:completed` once the
+  backlog is finished on stop. Safe to read via `get_transcript_for_recording/1`
+  at any point — segments are returned regardless of status.
+  """
+  @spec create_live_transcript(integer()) :: {:ok, Transcript.t()} | {:error, Ecto.Changeset.t()}
+  def create_live_transcript(recording_id) do
+    %Transcript{}
+    |> Transcript.changeset(%{recording_id: recording_id, status: :transcribing})
+    |> Repo.insert()
+  end
+
+  @doc """
+  Appends one finalized live segment to a transcript, with no speaker
+  attribution — diarization is post-hoc and runs once on stop (story 872:
+  no speaker labels during recording). `attrs` carries `:text`,
+  `:start_offset`, and `:end_offset` (absolute milliseconds from the start of
+  the recording).
+  """
+  @spec append_segment(integer(), %{
+          text: String.t(),
+          start_offset: non_neg_integer(),
+          end_offset: non_neg_integer()
+        }) :: {:ok, Segment.t()} | {:error, Ecto.Changeset.t()}
+  def append_segment(transcript_id, %{text: text} = attrs) do
+    %Segment{}
+    |> Segment.changeset(%{
+      transcript_id: transcript_id,
+      text: text,
+      machine_text: text,
+      start_offset: attrs.start_offset,
+      end_offset: attrs.end_offset
+    })
+    |> Repo.insert()
+  end
+
+  @doc "Marks a live transcript complete once its backlog is fully transcribed."
+  @spec complete_transcript(integer()) :: {:ok, Transcript.t()} | {:error, Ecto.Changeset.t()}
+  def complete_transcript(transcript_id) do
+    Transcript
+    |> Repo.get!(transcript_id)
+    |> Transcript.changeset(%{status: :completed})
+    |> Repo.update()
+  end
+
+  @doc """
   Fetches the transcript a segment belongs to, with segments loaded in
   playback order. Backs `EarWitness.Search.reindex_segment/1`, which
   needs the owning recording and the transcript's full speaker roster to

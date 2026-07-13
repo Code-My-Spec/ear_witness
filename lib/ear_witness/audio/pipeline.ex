@@ -63,6 +63,19 @@ defmodule EarWitness.Audio.Pipeline do
     end
   end
 
+  @doc """
+  Returns `{:ok, handle}` with the native capture handle for a running real
+  capture `ref`, or `:error` for an unknown `ref` or a `:fixture` capture
+  (which has no device handle). Backs `EarWitness.Audio.capture_handle/1`.
+  """
+  @spec capture_handle(reference()) :: {:ok, term()} | :error
+  def capture_handle(ref) do
+    case Captures.get(ref) do
+      %{kind: :real, capture_handle: handle} -> {:ok, handle}
+      _ -> :error
+    end
+  end
+
   @doc "Stops the capture identified by `ref`, returning its channels and output path."
   @spec stop(reference()) :: {:ok, %{channels: [atom()], path: Path.t()}} | {:error, :not_found}
   def stop(ref) do

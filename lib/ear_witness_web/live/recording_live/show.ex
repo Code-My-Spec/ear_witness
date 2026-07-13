@@ -124,9 +124,19 @@ defmodule EarWitnessWeb.RecordingLive.Show do
           >
             <span class="loading loading-spinner loading-xs"></span> {@transcript.status}
           </div>
-          <div :if={@transcript && @transcript.status == :completed} data-test="transcript" class="space-y-2">
+          <%!--
+            Render segments whenever any exist — during a live recording they
+            stream in with status :transcribing and no speaker (story 872), and
+            once the recording stops + diarizes they carry speaker labels. The
+            "no speech" message is only meaningful once transcription is done.
+          --%>
+          <div
+            :if={@transcript && (@transcript.status == :completed or @transcript.segments != [])}
+            data-test="transcript"
+            class="space-y-2"
+          >
             <p
-              :if={@transcript.segments == []}
+              :if={@transcript.status == :completed and @transcript.segments == []}
               data-test="transcript-empty"
               class="text-sm opacity-70 italic"
             >
@@ -141,7 +151,12 @@ defmodule EarWitnessWeb.RecordingLive.Show do
               <span data-test="segment-timestamp" class="tnum text-xs opacity-60">
                 {Format.duration(segment.start_offset / 1000)}
               </span>
-              <span data-test="segment-speaker" data-segment-id={segment.id} class="badge badge-ghost badge-sm">
+              <span
+                :if={@transcript.status == :completed and @transcript.diarized_at}
+                data-test="segment-speaker"
+                data-segment-id={segment.id}
+                class="badge badge-ghost badge-sm"
+              >
                 {@speaker_labels[segment.id]}
               </span>
               <span>{segment.text}</span>
