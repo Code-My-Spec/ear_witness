@@ -54,7 +54,7 @@ defmodule EarWitnessWeb.Application do
             app: @app,
             id: EarWitnessWindow,
             title: "EarWitness",
-            size: {600, 500},
+            size: {1200, 850},
             icon: "icon.png",
             menubar: EarWitness.MenuBar,
             icon_menu: EarWitness.Menu,
