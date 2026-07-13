@@ -39,21 +39,16 @@ defmodule EarWitnessSpex.KeepRecordingsOrganized.Criterion7358Spex do
         |> Map.put(:show_path_2, show_path_2)
       end
 
-      when_ "they create a new case with a name, date, and participants", context do
+      when_ "they create a new tag", context do
         {index_view, index_html} =
-          EarWitnessSpex.CollectionSteps.create_collection(
-            context.conn,
-            "Smith v. Landlord",
-            date: "2026-07-01",
-            participants: "Adjudicator Smith, Jane Tenant"
-          )
+          EarWitnessSpex.CollectionSteps.create_collection(context.conn, "Smith v. Landlord")
 
         context
         |> Map.put(:index_view, index_view)
         |> Map.put(:index_html, index_html)
       end
 
-      then_ "the new case appears in the library", context do
+      then_ "the new tag appears in the library", context do
         assert has_element?(
                  context.index_view,
                  ~s([data-test="collection"]),
@@ -63,39 +58,35 @@ defmodule EarWitnessSpex.KeepRecordingsOrganized.Criterion7358Spex do
         :ok
       end
 
-      when_ "they add the first hearing to that case", context do
-        collection_id =
-          EarWitnessSpex.CollectionSteps.collection_id(context.index_html, "Smith v. Landlord")
-
+      when_ "they add the first hearing to that tag", context do
         {view, html} =
-          EarWitnessSpex.CollectionSteps.add_to_collection(
+          EarWitnessSpex.CollectionSteps.add_tag(
             context.conn,
             context.show_path_1,
-            collection_id
+            "Smith v. Landlord"
           )
 
         context
-        |> Map.put(:collection_id, collection_id)
         |> Map.put(:show_view_1, view)
         |> Map.put(:show_html_1, html)
       end
 
-      then_ "the first hearing now shows that case as one of its collections", context do
+      then_ "the first hearing now shows that tag", context do
         assert has_element?(
                  context.show_view_1,
-                 ~s([data-test="recording-collection"]),
+                 ~s([data-test="recording-tag"]),
                  "Smith v. Landlord"
                )
 
         :ok
       end
 
-      when_ "they add the second hearing to that same case", context do
+      when_ "they add the second hearing to that same tag", context do
         {view, html} =
-          EarWitnessSpex.CollectionSteps.add_to_collection(
+          EarWitnessSpex.CollectionSteps.add_tag(
             context.conn,
             context.show_path_2,
-            context.collection_id
+            "Smith v. Landlord"
           )
 
         context
@@ -103,10 +94,10 @@ defmodule EarWitnessSpex.KeepRecordingsOrganized.Criterion7358Spex do
         |> Map.put(:show_html_2, html)
       end
 
-      then_ "the second hearing now shows that case as one of its collections", context do
+      then_ "the second hearing now shows that tag", context do
         assert has_element?(
                  context.show_view_2,
-                 ~s([data-test="recording-collection"]),
+                 ~s([data-test="recording-tag"]),
                  "Smith v. Landlord"
                )
 

@@ -47,13 +47,11 @@ defmodule EarWitnessSpex.KeepRecordingsOrganized.Criterion7360Spex do
         |> Map.put(:review_id, review_id)
       end
 
-      when_ "they add the hearing to both collections at once", context do
+      when_ "they add the hearing to both tags", context do
+        EarWitnessSpex.CollectionSteps.add_tag(context.conn, context.show_path, "123 Main St Case")
+
         {view, html} =
-          EarWitnessSpex.CollectionSteps.set_collections(
-            context.conn,
-            context.show_path,
-            [context.case_id, context.review_id]
-          )
+          EarWitnessSpex.CollectionSteps.add_tag(context.conn, context.show_path, "Weekly Review")
 
         context
         |> Map.put(:show_view, view)
@@ -63,13 +61,13 @@ defmodule EarWitnessSpex.KeepRecordingsOrganized.Criterion7360Spex do
       then_ "the hearing shows both collections as its own", context do
         assert has_element?(
                  context.show_view,
-                 ~s([data-test="recording-collection"]),
+                 ~s([data-test="recording-tag"]),
                  "123 Main St Case"
                )
 
         assert has_element?(
                  context.show_view,
-                 ~s([data-test="recording-collection"]),
+                 ~s([data-test="recording-tag"]),
                  "Weekly Review"
                )
 

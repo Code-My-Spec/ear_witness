@@ -91,7 +91,7 @@ defmodule EarWitnessWeb.RecordingLive.Index do
         <div class="card bg-base-100 border border-base-300 shadow-sm">
           <div class="card-body">
             <h2 class="card-title">
-              <.icon name="hero-folder" class="size-5 text-primary" /> Cases
+              <.icon name="hero-tag" class="size-5 text-primary" /> Tags
             </h2>
             <form
               id="collection-form"
@@ -102,17 +102,10 @@ defmodule EarWitnessWeb.RecordingLive.Index do
               <input
                 type="text"
                 name="collection[name]"
-                placeholder="Case name"
+                placeholder="Tag name"
                 class="input input-bordered input-sm"
               />
-              <input type="date" name="collection[date]" class="input input-bordered input-sm" />
-              <input
-                type="text"
-                name="collection[participants]"
-                placeholder="Participants"
-                class="input input-bordered input-sm"
-              />
-              <button type="submit" class="btn btn-sm">Create case</button>
+              <button type="submit" class="btn btn-sm">Create tag</button>
             </form>
 
             <div :if={@collection_error} data-test="collection-error" class="alert alert-error mt-2">
@@ -146,7 +139,7 @@ defmodule EarWitnessWeb.RecordingLive.Index do
                   phx-value-id={collection.id}
                   class="btn btn-xs btn-ghost"
                 >
-                  <.icon name="hero-x-mark" class="size-3.5" /> Delete case
+                  <.icon name="hero-x-mark" class="size-3.5" /> Delete tag
                 </button>
               </div>
               <div class="space-y-1 pl-2">
@@ -161,7 +154,7 @@ defmodule EarWitnessWeb.RecordingLive.Index do
           class="card bg-base-100 border border-base-300 shadow-sm"
         >
           <div class="card-body">
-            <h2 class="card-title">Uncategorized</h2>
+            <h2 class="card-title">Untagged</h2>
             <p :if={@uncategorized == []} class="text-sm opacity-70">Nothing here yet.</p>
             <div class="space-y-1">
               <.recording_row :for={recording <- @uncategorized} recording={recording} />

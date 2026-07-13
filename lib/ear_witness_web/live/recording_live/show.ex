@@ -28,11 +28,6 @@ defmodule EarWitnessWeb.RecordingLive.Show do
             <span data-test="recording-date">{@recording.date}</span>
             <span data-test="recording-participants">{@recording.participants}</span>
           </div>
-          <div class="flex flex-wrap gap-2">
-            <span :for={collection <- @recording.collections} data-test="recording-collection" class="badge badge-secondary badge-sm">
-              {collection.name}
-            </span>
-          </div>
         </div>
 
         <button
@@ -47,31 +42,46 @@ defmodule EarWitnessWeb.RecordingLive.Show do
 
       <div class="card bg-base-100 border border-base-300 shadow-sm">
         <div class="card-body">
-          <h2 class="card-title">Cases</h2>
-          <form id="recording-collections-form" data-test="recording-collections-form" phx-change="set_collections">
-            <%!--
-              `EarWitnessSpex.CollectionSteps.collection_id/2` resolves a
-              case's id by reading this label's own bare text as its name
-              — keep `collection.name` as the label's first, unwrapped
-              child, ahead of the checkbox.
-            --%>
-            <label
-              :for={collection <- @collections}
-              data-test="collection-option"
-              data-collection-id={collection.id}
-              class="flex items-center justify-between gap-2 py-1"
+          <h2 class="card-title">Tags</h2>
+          <div class="flex flex-wrap items-center gap-2">
+            <span
+              :for={tag <- @recording.collections}
+              data-test="recording-tag"
+              data-tag-id={tag.id}
+              class="badge badge-secondary gap-1"
             >
-              {collection.name}
+              {tag.name}
+              <button
+                type="button"
+                data-test="remove-tag"
+                data-tag-id={tag.id}
+                phx-click="remove_tag"
+                phx-value-tag_id={tag.id}
+                aria-label={"Remove tag #{tag.name}"}
+                class="opacity-70 hover:opacity-100"
+              >
+                ✕
+              </button>
+            </span>
+
+            <form id="add-tag-form" data-test="add-tag-form" phx-submit="add_tag" class="inline-flex">
               <input
-                type="checkbox"
-                name="recording[collection_ids][]"
-                value={collection.id}
-                checked={collection.id in Enum.map(@recording.collections, & &1.id)}
-                class="checkbox checkbox-sm"
+                type="text"
+                name="tag_name"
+                data-test="add-tag-input"
+                list="tag-suggestions"
+                placeholder="Add a tag…"
+                autocomplete="off"
+                class="input input-bordered input-xs"
               />
-            </label>
-            <p :if={@collections == []} class="text-sm opacity-70">No cases yet.</p>
-          </form>
+              <datalist id="tag-suggestions">
+                <option :for={tag <- @all_tags} value={tag.name} />
+              </datalist>
+            </form>
+          </div>
+          <p :if={@recording.collections == []} class="text-sm opacity-70">
+            No tags yet — type one above to add it.
+          </p>
         </div>
       </div>
 
@@ -151,7 +161,7 @@ defmodule EarWitnessWeb.RecordingLive.Show do
 
     {:ok,
      socket
-     |> assign(recording: recording, collections: Recordings.list_collections())
+     |> assign(recording: recording, all_tags: Recordings.list_collections())
      |> assign_transcript()}
   end
 
@@ -161,21 +171,16 @@ defmodule EarWitnessWeb.RecordingLive.Show do
     {:noreply, assign_transcript(socket)}
   end
 
-  def handle_event("set_collections", params, socket) do
-    # Unchecking the last checked box submits a form with no
-    # `recording[collection_ids][]` field at all, so `params` carries no
-    # "recording" key. Default it to %{} rather than pattern-matching on
-    # it, so clearing the final case removes membership instead of the
-    # event silently failing and the box snapping back (issue 4df46bc8).
-    ids =
-      params
-      |> Map.get("recording", %{})
-      |> Map.get("collection_ids", [])
-      |> List.wrap()
-      |> Enum.reject(&(&1 == ""))
-      |> Enum.map(&String.to_integer/1)
+  def handle_event("add_tag", %{"tag_name" => name}, socket) do
+    {:ok, recording} = Recordings.add_recording_tag(socket.assigns.recording, name)
 
-    {:ok, recording} = Recordings.set_recording_collections(socket.assigns.recording, ids)
+    {:noreply,
+     socket
+     |> assign(recording: recording, all_tags: Recordings.list_collections())}
+  end
+
+  def handle_event("remove_tag", %{"tag_id" => tag_id}, socket) do
+    {:ok, recording} = Recordings.remove_recording_tag(socket.assigns.recording, tag_id)
     {:noreply, assign(socket, :recording, recording)}
   end
 

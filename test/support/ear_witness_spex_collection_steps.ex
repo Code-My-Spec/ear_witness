@@ -52,18 +52,12 @@ defmodule EarWitnessSpex.CollectionSteps do
   `:participants` options. Returns `{index_view, html}` — the index
   LiveView and its rendered HTML right after creation.
   """
-  def create_collection(conn, name, opts \\ []) do
+  def create_collection(conn, name, _opts \\ []) do
     {:ok, view, _html} = live(conn, "/recordings")
 
     html =
       view
-      |> form(~s([data-test="collection-form"]), %{
-        "collection" => %{
-          "name" => name,
-          "date" => Keyword.get(opts, :date, Date.to_iso8601(Date.utc_today())),
-          "participants" => Keyword.get(opts, :participants, "")
-        }
-      })
+      |> form(~s([data-test="collection-form"]), %{"collection" => %{"name" => name}})
       |> render_submit()
 
     {view, html}
@@ -84,29 +78,19 @@ defmodule EarWitnessSpex.CollectionSteps do
   end
 
   @doc """
-  Opens the recording at `show_path` and sets its full collection
-  membership to exactly `collection_ids` through the real membership
-  checkbox form (`[data-test="recording-collections-form"]`). Returns
+  Opens the recording at `show_path` and tags it with `name` through the
+  real type-to-create Tags field (`[data-test="add-tag-form"]`, field
+  `tag_name`). Creates the tag if it doesn't exist yet. Returns
   `{view, html}` after the change.
   """
-  def set_collections(conn, show_path, collection_ids) do
+  def add_tag(conn, show_path, name) do
     {:ok, view, _html} = live(conn, show_path)
 
     html =
       view
-      |> form(~s([data-test="recording-collections-form"]), %{
-        "recording" => %{"collection_ids" => collection_ids}
-      })
-      |> render_change()
+      |> form(~s([data-test="add-tag-form"]), %{"tag_name" => name})
+      |> render_submit()
 
     {view, html}
   end
-
-  @doc """
-  Adds the recording at `show_path` to the single collection identified
-  by `collection_id`, through `set_collections/3`. Returns `{view, html}`
-  after the change.
-  """
-  def add_to_collection(conn, show_path, collection_id),
-    do: set_collections(conn, show_path, [collection_id])
 end

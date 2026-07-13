@@ -32,16 +32,7 @@ defmodule EarWitnessSpex.KeepRecordingsOrganized.Criterion7361Spex do
             EarWitnessSpex.WavFixture.short()
           )
 
-        {_view, collection_html} =
-          EarWitnessSpex.CollectionSteps.create_collection(context.conn, "Case A")
-
-        collection_id = EarWitnessSpex.CollectionSteps.collection_id(collection_html, "Case A")
-
-        EarWitnessSpex.CollectionSteps.add_to_collection(
-          context.conn,
-          show_path_a,
-          collection_id
-        )
+        EarWitnessSpex.CollectionSteps.add_tag(context.conn, show_path_a, "Case A")
 
         context
       end

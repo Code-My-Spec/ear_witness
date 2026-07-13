@@ -135,6 +135,56 @@ defmodule EarWitness.Recordings do
     |> Repo.insert()
   end
 
+  @doc """
+  Adds a tag to a recording, creating the tag (a named collection) if it
+  doesn't exist yet — the type-to-create path behind the recording's Tags
+  field. Blank names are a no-op. Idempotent: re-adding an existing tag
+  leaves membership unchanged.
+  """
+  @spec add_recording_tag(Recording.t(), String.t()) ::
+          {:ok, Recording.t()} | {:error, Ecto.Changeset.t()}
+  def add_recording_tag(%Recording{} = recording, name) do
+    case String.trim(name || "") do
+      "" ->
+        {:ok, Repo.preload(recording, :collections)}
+
+      trimmed ->
+        tag = find_or_create_collection(trimmed)
+        recording = Repo.preload(recording, :collections)
+        tags = Enum.uniq_by([tag | recording.collections], & &1.id)
+        put_recording_collections(recording, tags)
+    end
+  end
+
+  @doc "Removes a tag from a recording, keeping the tag itself and its other members."
+  @spec remove_recording_tag(Recording.t(), term()) ::
+          {:ok, Recording.t()} | {:error, Ecto.Changeset.t()}
+  def remove_recording_tag(%Recording{} = recording, tag_id) do
+    recording = Repo.preload(recording, :collections)
+    kept = Enum.reject(recording.collections, &(to_string(&1.id) == to_string(tag_id)))
+    put_recording_collections(recording, kept)
+  end
+
+  defp find_or_create_collection(name) do
+    case Repo.one(from(c in Collection, where: c.name == ^name)) do
+      nil ->
+        {:ok, collection} = create_collection(%{name: name})
+        collection
+
+      collection ->
+        collection
+    end
+  end
+
+  defp put_recording_collections(recording, collections) do
+    recording
+    |> Repo.preload(:collections)
+    |> Ecto.Changeset.change()
+    |> Ecto.Changeset.put_assoc(:collections, collections)
+    |> Repo.update()
+    |> index_for_search()
+  end
+
   @doc "Deletes a collection without cascading to its member recordings."
   @spec delete_collection(Collection.t()) :: {:ok, Collection.t()} | {:error, Ecto.Changeset.t()}
   def delete_collection(%Collection{id: id} = collection) do

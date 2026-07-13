@@ -36,7 +36,7 @@ defmodule EarWitnessSpex.KeepRecordingsOrganized.Criterion7362Spex do
         collection_id =
           EarWitnessSpex.CollectionSteps.collection_id(collection_html, "Case To Delete")
 
-        EarWitnessSpex.CollectionSteps.add_to_collection(context.conn, show_path, collection_id)
+        EarWitnessSpex.CollectionSteps.add_tag(context.conn, show_path, "Case To Delete")
 
         context
         |> Map.put(:show_path, show_path)
