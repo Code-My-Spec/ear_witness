@@ -1,8 +1,7 @@
 defmodule EarWitnessWeb.RecordingLive.Show do
   @moduledoc """
-  One recording — playback metadata, transcribe action, live job
-  progress, the timestamped transcript, and case ("collection")
-  membership.
+  One recording — its details, transcribe action, live job progress, the
+  timestamped transcript, and case ("collection") membership.
   """
 
   use EarWitnessWeb, :live_view
@@ -44,38 +43,6 @@ defmodule EarWitnessWeb.RecordingLive.Show do
         >
           <.icon name="hero-trash" class="size-4" /> Delete
         </button>
-      </div>
-
-      <div class="card bg-base-100 border border-base-300 shadow-sm">
-        <div class="card-body">
-          <h2 class="card-title">Metadata</h2>
-          <form
-            id="recording-metadata-form"
-            data-test="recording-metadata-form"
-            phx-submit="save_metadata"
-            class="flex flex-wrap items-end gap-2"
-          >
-            <input
-              type="text"
-              name="recording[title]"
-              value={@recording.title}
-              class="input input-bordered input-sm"
-            />
-            <input
-              type="date"
-              name="recording[date]"
-              value={@recording.date}
-              class="input input-bordered input-sm"
-            />
-            <input
-              type="text"
-              name="recording[participants]"
-              value={@recording.participants}
-              class="input input-bordered input-sm"
-            />
-            <button type="submit" class="btn btn-primary btn-sm">Save</button>
-          </form>
-        </div>
       </div>
 
       <div class="card bg-base-100 border border-base-300 shadow-sm">
@@ -192,11 +159,6 @@ defmodule EarWitnessWeb.RecordingLive.Show do
   def handle_event("transcribe", _params, socket) do
     {:ok, _transcript} = Transcription.transcribe(socket.assigns.recording)
     {:noreply, assign_transcript(socket)}
-  end
-
-  def handle_event("save_metadata", %{"recording" => params}, socket) do
-    {:ok, recording} = Recordings.update_recording(socket.assigns.recording, params)
-    {:noreply, assign(socket, :recording, recording)}
   end
 
   def handle_event("set_collections", params, socket) do
