@@ -78,6 +78,24 @@ defmodule EarWitness.Speakers do
   end
 
   @doc """
+  Distinct chosen speaker names across the whole library, sorted — the set
+  worth offering as a global filter (e.g. the /search speaker dropdown).
+  Only named speakers are returned; generic "Speaker N" labels are
+  per-transcript indices and not globally meaningful to filter on.
+  """
+  @spec list_speaker_names() :: [String.t()]
+  def list_speaker_names do
+    Repo.all(
+      from(s in Speaker,
+        where: not is_nil(s.name),
+        order_by: s.name,
+        select: s.name,
+        distinct: true
+      )
+    )
+  end
+
+  @doc """
   The display label for a speaker: their chosen name, a generic
   "Speaker N" (1-indexed by `index`) before naming, or "Unknown" when no
   speaker was detected at all.

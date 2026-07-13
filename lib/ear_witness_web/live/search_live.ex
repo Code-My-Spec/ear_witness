@@ -6,7 +6,7 @@ defmodule EarWitnessWeb.SearchLive do
 
   use EarWitnessWeb, :live_view
 
-  alias EarWitness.Search
+  alias EarWitness.{Search, Speakers}
   alias EarWitnessWeb.RecordingLive.Format
 
   @impl true
@@ -32,11 +32,16 @@ defmodule EarWitnessWeb.SearchLive do
           <input
             type="text"
             name="speaker"
+            data-test="speaker-filter"
             value={@filters["speaker"]}
+            list="speaker-options"
             placeholder="Speaker"
             phx-debounce="200"
             class="input input-bordered input-sm"
           />
+          <datalist id="speaker-options">
+            <option :for={name <- @speaker_options} value={name} />
+          </datalist>
           <input type="date" name="from" value={@filters["from"]} class="input input-bordered input-sm" />
           <input type="date" name="to" value={@filters["to"]} class="input input-bordered input-sm" />
         </div>
@@ -95,6 +100,7 @@ defmodule EarWitnessWeb.SearchLive do
      assign(socket,
        query: "",
        filters: %{"speaker" => "", "from" => "", "to" => ""},
+       speaker_options: Speakers.list_speaker_names(),
        results: []
      )}
   end
