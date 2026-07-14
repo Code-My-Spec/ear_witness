@@ -239,6 +239,18 @@ defmodule EarWitness.Recordings do
            }}
           | {:error, atom()}
   def start_live_capture do
+    # One capture at a time, enforced here rather than in any single view's
+    # assigns: a second recordings view (second window/tab) can't see the
+    # first view's capturing? state, and a second device capture would run
+    # unstoppable — running_live_capture/0 only ever reports one.
+    if running_live_capture() do
+      {:error, :already_capturing}
+    else
+      do_start_live_capture()
+    end
+  end
+
+  defp do_start_live_capture do
     path = Path.join(EarWitness.recordings_dir(), Ecto.UUID.generate() <> ".wav")
 
     case Audio.start_capture(path) do

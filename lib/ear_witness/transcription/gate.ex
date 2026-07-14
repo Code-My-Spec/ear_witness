@@ -48,6 +48,10 @@ defmodule EarWitness.Transcription.Gate do
   @impl true
   def init(nil) do
     :ets.new(@busy_table, [:named_table, :public, read_concurrency: true])
+    # If a previous incarnation crashed mid-run, subscribers may still be
+    # rendering busy (they never got the false broadcast) — a fresh gate is
+    # idle by definition.
+    EarWitness.Transcription.broadcast_activity(false)
     {:ok, nil}
   end
 
@@ -62,6 +66,7 @@ defmodule EarWitness.Transcription.Gate do
         error -> {:error, Exception.message(error)}
       catch
         :exit, reason -> {:error, "transcription crashed: #{inspect(reason)}"}
+        thrown -> {:error, "transcription crashed: #{inspect(thrown)}"}
       end
 
     set_busy(false)

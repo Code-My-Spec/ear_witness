@@ -8,6 +8,8 @@ defmodule EarWitness.Transcription.Worker do
 
   use Oban.Worker, queue: :transcription, max_attempts: 3
 
+  import Ecto.Query, only: [from: 2]
+
   alias EarWitness.Recordings.Recording
   alias EarWitness.Repo
   alias EarWitness.Search
@@ -27,6 +29,10 @@ defmodule EarWitness.Transcription.Worker do
 
     case safe_transcribe(engine, recording.file_path) do
       {:ok, documents} ->
+        # Idempotent re-run: an Oban retry (or a job resumed after a crash /
+        # kill mid-perform) must replace any segments an interrupted attempt
+        # already inserted, not append a second full copy.
+        Repo.delete_all(from(s in Segment, where: s.transcript_id == ^transcript.id))
         insert_segments(transcript, documents)
         transcript |> update_status(:completed) |> broadcast(recording_id)
         index_for_search(recording_id)

@@ -244,6 +244,10 @@ defmodule EarWitnessWeb.RecordingLive.Show do
     {:noreply, assign(socket, :live_progress, progress)}
   end
 
+  # The "transcription:<id>" topic multiplexes message shapes; a future shape
+  # must not crash this view (index.ex has the same fallthrough).
+  def handle_info(_msg, socket), do: {:noreply, socket}
+
   # Diarizes (idempotently) the moment a completed transcript is loaded, so
   # every segment carries speaker attribution without a separate action —
   # same as `TranscriptLive.Editor.load_transcript/1`.

@@ -65,6 +65,22 @@ defmodule EarWitness.Speakers do
   end
 
   def diarize_transcript(%Transcript{} = transcript) do
+    # Both finalizers broadcast :completed BEFORE running their own diarize,
+    # and a mounted recording view reacts to that broadcast by diarizing too —
+    # so two processes can pass the diarized_at-nil check together and each
+    # create Speaker rows for the same voice. Serialize per transcript and
+    # re-check the stamp under the lock; the loser exits without diarizing.
+    :global.trans({{__MODULE__, :diarize, transcript.id}, self()}, fn ->
+      case Repo.get(Transcript, transcript.id) do
+        %Transcript{diarized_at: nil, status: :completed} -> do_diarize(transcript)
+        _ -> :ok
+      end
+    end)
+
+    :ok
+  end
+
+  defp do_diarize(transcript) do
     {:ok, recording} = Recordings.get_recording(transcript.recording_id)
     diarizer = Application.get_env(:ear_witness, :diarizer, EarWitness.Speakers.Diarizer.Onnx)
 

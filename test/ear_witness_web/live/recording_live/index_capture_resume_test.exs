@@ -35,6 +35,50 @@ defmodule EarWitnessWeb.RecordingLive.IndexCaptureResumeTest do
     assert transcript.status == :completed
   end
 
+  test "a second view can't start a second capture — it picks up the running one", %{
+    conn: conn
+  } do
+    EarWitnessSpex.Fixtures.enable_live_capture_seam()
+
+    # The Captures agent may hold stale entries from earlier tests that never
+    # drove Stop — measure this test's delta, not the absolute size.
+    baseline = map_size(EarWitness.Audio.Captures.all())
+
+    {:ok, first, _html} = live(conn, "/recordings")
+    first |> element("button", "Record") |> render_click()
+
+    # Second view mounts idle-looking only if rehydration failed; either way,
+    # Record must not start a second device capture.
+    {:ok, second, _html} = live(conn, "/recordings")
+
+    if has_element?(second, ~s|button[phx-click="record"]:not([disabled])|) do
+      second |> element("button", "Record") |> render_click()
+    end
+
+    assert map_size(EarWitness.Audio.Captures.all()) == baseline + 1
+  end
+
+  test "a view whose capture was stopped elsewhere clears its recording state", %{conn: conn} do
+    EarWitnessSpex.Fixtures.enable_live_capture_seam()
+
+    {:ok, first, _html} = live(conn, "/recordings")
+    first |> element("button", "Record") |> render_click()
+    recording_id = EarWitnessSpex.Fixtures.live_recording_id()
+
+    # Second view rehydrates the running capture...
+    {:ok, second, _html} = live(conn, "/recordings")
+    assert has_element?(second, ~s([data-test="capture-status"]))
+
+    # ...then the FIRST view stops it. The second must drop its recording
+    # badge/Stop button once the :completed broadcast lands.
+    first |> element("button", "Stop") |> render_click()
+    EarWitnessSpex.Fixtures.await_live_transcription_finalized(recording_id)
+
+    render(second)
+    refute has_element?(second, ~s([data-test="capture-status"]))
+    assert has_element?(second, ~s|button[phx-click="record"]:not([disabled])|)
+  end
+
   test "record is disabled with a notice while an earlier transcription runs", %{conn: conn} do
     alias EarWitness.Transcription.Gate
 

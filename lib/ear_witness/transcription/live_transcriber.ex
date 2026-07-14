@@ -325,6 +325,12 @@ defmodule EarWitness.Transcription.LiveTranscriber do
 
     try do
       state.engine.transcribe(tmp)
+    catch
+      # A Gate restart mid-call exits this process's GenServer.call; treated
+      # as a failed window (same as an engine error), the capture keeps
+      # running and the backlog catches up on the next drain — instead of
+      # killing this :temporary transcriber and stranding the transcript.
+      :exit, reason -> {:error, "transcription engine unavailable: #{inspect(reason)}"}
     after
       File.rm(tmp)
     end

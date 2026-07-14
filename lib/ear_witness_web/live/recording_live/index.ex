@@ -419,7 +419,7 @@ defmodule EarWitnessWeb.RecordingLive.Index do
   end
 
   @impl true
-  def handle_info({:transcription_status, _status}, socket) do
+  def handle_info({:transcription_status, status}, socket) do
     # Live transcript advanced (a new batch of segments, completion, or
     # diarization) — re-fetch and re-render the streaming segment list.
     segments =
@@ -430,7 +430,22 @@ defmodule EarWitnessWeb.RecordingLive.Index do
         _ -> socket.assigns.live_segments
       end
 
-    {:noreply, assign(socket, :live_segments, segments)}
+    socket = assign(socket, :live_segments, segments)
+
+    # :completed on our subscribed recording means the capture stopped. When
+    # ANOTHER view drove the Stop (second window/tab), this view still holds
+    # capturing?: true — clear it, or it keeps a live "recording" badge and an
+    # enabled Stop that can only error.
+    socket =
+      if status == :completed and socket.assigns.capturing? do
+        socket
+        |> assign(capturing?: false, capture_ref: nil, capture_notice: nil)
+        |> reload_library()
+      else
+        socket
+      end
+
+    {:noreply, socket}
   end
 
   def handle_info({:transcription_activity, %{busy: busy}}, socket) do
@@ -439,8 +454,33 @@ defmodule EarWitnessWeb.RecordingLive.Index do
 
   def handle_info(_msg, socket), do: {:noreply, socket}
 
+  # Bound the device start: AudioDeviceStart can stall for minutes inside
+  # CoreAudio when coreaudiod is unhealthy (observed live, 2026-07-14). The
+  # dirty NIF keeps the VM healthy during the stall, but without a bound this
+  # LiveView would wait forever showing only the client-side "Starting…" —
+  # yield for a bounded time, then surface a real error the user can act on.
+  @capture_start_timeout_ms 15_000
+
   defp handle_record(socket) do
-    case Recordings.start_live_capture() do
+    task = Task.async(Recordings, :start_live_capture, [])
+
+    case Task.yield(task, @capture_start_timeout_ms) || Task.shutdown(task, :brutal_kill) do
+      {:ok, result} ->
+        apply_capture_start(socket, result)
+
+      _timeout_or_crash ->
+        assign(socket,
+          capture_error:
+            "The audio device didn't respond, so recording could not start. " <>
+              "Try again — if it keeps happening, restart the app (or the Mac's audio: sudo killall coreaudiod).",
+          capturing?: false,
+          capture_notice: nil
+        )
+    end
+  end
+
+  defp apply_capture_start(socket, result) do
+    case result do
       {:ok, %{ref: ref, channels: channels, notice: notice, recording_id: recording_id}} ->
         # A real device-backed capture streams a live transcript (story 872);
         # subscribe so segments render as they're transcribed. recording_id is
@@ -478,6 +518,14 @@ defmodule EarWitnessWeb.RecordingLive.Index do
           capturing?: false,
           capture_notice: nil
         )
+
+      {:error, :already_capturing} ->
+        # Another view already started one (second window/tab). Pick that
+        # capture up instead of showing a dead error — same rehydration a
+        # fresh mount does.
+        socket
+        |> assign(capture_error: "A recording is already in progress.")
+        |> resume_running_capture()
     end
   end
 

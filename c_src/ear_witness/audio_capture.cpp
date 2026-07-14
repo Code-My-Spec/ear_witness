@@ -75,6 +75,12 @@ struct CaptureState {
   // index-aligned, into `mixed`, which read_new/stop then serve/finalize. Empty
   // and unused for single-source captures.
   bool duplex = false;
+  // Serializes the duplex CONSUMERS — read_new (the live transcriber's drain
+  // process) and stop_capture (the UI's stop) run from different Erlang
+  // processes, i.e. different scheduler threads. tap_buffer/mixed/read_cursor
+  // and mac_tap_handle teardown are only touched under this lock. `mutex`
+  // above keeps protecting `samples` against the audio callback.
+  std::mutex duplex_mutex;
   std::vector<ma_int16> tap_buffer;  // system-audio samples drained from the tap
   std::vector<ma_int16> mixed;       // mic + system audio, summed and clamped
   // Non-null when this capture is a macOS Core Audio process tap rather than a
@@ -654,11 +660,22 @@ static ERL_NIF_TERM nif_stop_capture(ErlNifEnv *env, int argc, const ERL_NIF_TER
   // write ONE combined 16kHz mono WAV. Checked before the tap-only branch since
   // a duplex capture also carries a mac_tap_handle.
   if (state->duplex) {
+    // Device stop stays OUTSIDE duplex_mutex: ma_device_stop blocks until the
+    // audio callback drains, and that callback takes state->mutex — holding
+    // an unrelated lock here is fine, but keeping the stop unlocked keeps the
+    // lock ordering trivially safe.
     if (state->device_initialized) {
       ma_device_stop(&state->device);
       ma_device_uninit(&state->device);
       state->device_initialized = false;
     }
+
+    // Everything the concurrent read_new consumer touches — tap drain, the
+    // mixed buffer (realloc on growth!), and the tap handle free — happens
+    // under duplex_mutex, so a drain tick mid-stop can't memcpy from a
+    // reallocated `mixed` or use a freed tap handle.
+    std::lock_guard<std::mutex> duplex_lock(state->duplex_mutex);
+
     if (state->mac_tap_handle != nullptr) {
       ew_mac_tap_quiesce(state->mac_tap_handle);
     }
@@ -724,11 +741,14 @@ static ERL_NIF_TERM nif_capture_read_new(ErlNifEnv *env, int argc, const ERL_NIF
 
 #ifdef __APPLE__
   // Duplex (mic + system-audio tap): mix whatever is newly available from both
-  // sources, then serve the newly-mixed samples. `mixed` is consumer-owned
-  // (only mix_duplex grows it, and we are the sole consumer), so it needs no
-  // lock against the audio thread here. Checked before the tap-only branch
-  // since a duplex capture also carries a mac_tap_handle.
+  // sources, then serve the newly-mixed samples. Held under duplex_mutex the
+  // whole way: stop_capture (a different Erlang process → different scheduler
+  // thread) grows `mixed` in its final mix — a vector realloc would leave the
+  // memcpy below reading a dangling data() pointer — and frees the tap handle
+  // mix_duplex drains. Checked before the tap-only branch since a duplex
+  // capture also carries a mac_tap_handle.
   if (state->duplex) {
+    std::lock_guard<std::mutex> duplex_lock(state->duplex_mutex);
     mix_duplex(state, /*final=*/false);
     size_t total = state->mixed.size();
     size_t new_count = state->read_cursor < total ? total - state->read_cursor : 0;
