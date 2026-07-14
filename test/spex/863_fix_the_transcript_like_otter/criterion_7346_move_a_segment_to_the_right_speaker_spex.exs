@@ -65,7 +65,7 @@ defmodule EarWitnessSpex.FixTheTranscriptLikeOtter.Criterion7346Spex do
           |> Regex.scan(html)
           |> Enum.map(fn [_, id, label] -> {id, String.trim(label)} end)
 
-        [{_untouched_speaker_id, untouched_speaker_label}, {target_speaker_id, target_speaker_label}] =
+        [{_untouched_speaker_id, untouched_speaker_label}, {_target_speaker_id, target_speaker_label}] =
           speakers
 
         moved_segment_id = EarWitnessSpex.TranscriptSteps.segment_id(html, "1, 2, 3.")
@@ -75,7 +75,7 @@ defmodule EarWitnessSpex.FixTheTranscriptLikeOtter.Criterion7346Spex do
           EarWitnessSpex.TranscriptSteps.reassign_segment_speaker(
             view,
             moved_segment_id,
-            target_speaker_id
+            target_speaker_label
           )
 
         context

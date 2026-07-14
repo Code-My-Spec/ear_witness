@@ -30,6 +30,10 @@ defmodule EarWitnessWeb.TranscriptLive.Editor do
 
       <.live_component module={SpeakerPanel} id="speaker-panel" speakers={@speakers} />
 
+      <datalist id="speaker-name-options">
+        <option :for={name <- @speaker_names} value={name} />
+      </datalist>
+
       <div data-test="transcript" class="space-y-3">
         <%!--
           Several `_spex.exs` scans (story 863) resolve a segment's id by
@@ -90,22 +94,17 @@ defmodule EarWitnessWeb.TranscriptLive.Editor do
               id={"segment-speaker-form-#{segment.id}"}
               data-test="segment-speaker-form"
               data-segment-id={segment.id}
-              phx-change="reassign_segment_speaker"
+              phx-submit="assign_speaker_name"
               phx-value-id={segment.id}
             >
-              <select
-                name="segment[speaker_id]"
-                aria-label="Reassign speaker"
-                class="select select-ghost select-xs w-full px-0 text-xs opacity-50 hover:opacity-100"
-              >
-                <option
-                  :for={{speaker, index} <- Enum.with_index(@speakers)}
-                  value={speaker.id}
-                  selected={speaker.id == segment.speaker_id}
-                >
-                  {Speakers.label(speaker, index)}
-                </option>
-              </select>
+              <input
+                type="text"
+                name="speaker_name"
+                value={@speaker_labels[segment.id]}
+                list="speaker-name-options"
+                aria-label="Assign speaker — type an existing name or a new one to create it"
+                class="input input-ghost input-xs w-full px-0 text-xs opacity-50 hover:opacity-100"
+              />
             </form>
             <span data-test="segment-timestamp" class="tnum pl-1 text-xs opacity-50">
               {Format.duration(segment.start_offset / 1000)}
@@ -167,15 +166,16 @@ defmodule EarWitnessWeb.TranscriptLive.Editor do
     {:noreply, load_transcript(socket)}
   end
 
-  def handle_event(
-        "reassign_segment_speaker",
-        %{"id" => id, "segment" => %{"speaker_id" => speaker_id}},
-        socket
-      ) do
-    {:ok, _segment} =
-      Transcription.reassign_segment_speaker(String.to_integer(id), String.to_integer(speaker_id))
+  def handle_event("assign_speaker_name", %{"id" => id, "speaker_name" => name}, socket) do
+    case String.trim(name) do
+      "" ->
+        {:noreply, socket}
 
-    {:noreply, load_transcript(socket)}
+      trimmed ->
+        speaker_id = resolve_speaker(trimmed, socket.assigns.speakers)
+        {:ok, _segment} = Transcription.reassign_segment_speaker(String.to_integer(id), speaker_id)
+        {:noreply, load_transcript(socket)}
+    end
   end
 
   def handle_event("revert_segment", %{"id" => id}, socket) do
@@ -208,8 +208,34 @@ defmodule EarWitnessWeb.TranscriptLive.Editor do
       transcript: transcript,
       segments: transcript.segments,
       speakers: speakers,
-      speaker_labels: speaker_labels(transcript.segments, speakers)
+      speaker_labels: speaker_labels(transcript.segments, speakers),
+      speaker_names: speaker_names(speakers)
     )
+  end
+
+  # The existing speaker labels for the datalist — the transcript's detected
+  # speakers ("Speaker 1"/"Speaker 2") and any that have been named. Typing one
+  # of these reassigns to that speaker; typing a new name creates one.
+  defp speaker_names(speakers) do
+    speakers
+    |> Enum.with_index()
+    |> Enum.map(fn {speaker, index} -> Speakers.label(speaker, index) end)
+    |> Enum.uniq()
+  end
+
+  # Resolve a typed name to a speaker id: match the transcript's current speaker
+  # labels first (so "Speaker 2"/"Alex" reassigns to that detected speaker),
+  # otherwise find or create a named speaker (the type-to-create path).
+  defp resolve_speaker(name, speakers) do
+    labeled =
+      speakers
+      |> Enum.with_index()
+      |> Enum.map(fn {speaker, index} -> {Speakers.label(speaker, index), speaker} end)
+
+    case Enum.find(labeled, fn {label, _speaker} -> label == name end) do
+      {_label, speaker} -> speaker.id
+      nil -> Speakers.find_or_create_by_name(name).id
+    end
   end
 
   defp speaker_labels(segments, speakers) do

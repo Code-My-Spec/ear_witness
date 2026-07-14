@@ -79,12 +79,15 @@ defmodule EarWitnessSpex.TranscriptSteps do
   speaker everywhere rather than moving one segment). Returns the
   rendered HTML after the change.
   """
-  def reassign_segment_speaker(view, segment_id, speaker_id) do
+  def reassign_segment_speaker(view, segment_id, speaker_name) do
+    # The editor's per-segment speaker control is a type-to-create field: typing
+    # an existing speaker's label reassigns to them; a new name creates a
+    # speaker. Submitting the name is how a segment is (re)attributed.
     view
     |> form(~s([data-test="segment-speaker-form"][data-segment-id="#{segment_id}"]), %{
-      "segment" => %{"speaker_id" => speaker_id}
+      "speaker_name" => speaker_name
     })
-    |> render_change()
+    |> render_submit()
   end
 
   @doc """

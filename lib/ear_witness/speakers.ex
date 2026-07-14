@@ -116,6 +116,24 @@ defmodule EarWitness.Speakers do
   end
 
   @doc """
+  Finds a speaker by exact name, or creates a new named speaker — the editor's
+  type-to-create path for attributing a segment to a person by name. The new
+  speaker carries no voice embedding (it wasn't detected from audio), so it
+  won't auto-match future recordings until it accrues one.
+  """
+  @spec find_or_create_by_name(String.t()) :: Speaker.t()
+  def find_or_create_by_name(name) do
+    case Repo.one(from(s in Speaker, where: s.name == ^name)) do
+      nil ->
+        {:ok, speaker} = %Speaker{} |> Speaker.changeset(%{name: name}) |> Repo.insert()
+        speaker
+
+      speaker ->
+        speaker
+    end
+  end
+
+  @doc """
   Forgets a speaker's voice signature. Segments already attributed to
   them keep their `speaker_id`, but since the speaker row is gone they
   display as "Unknown" going forward, and nothing about them can match
