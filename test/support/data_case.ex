@@ -35,6 +35,12 @@ defmodule EarWitnessTest.DataCase do
   def setup_sandbox(tags) do
     pid = Ecto.Adapters.SQL.Sandbox.start_owner!(EarWitness.Repo, shared: not tags[:async])
     on_exit(fn -> Ecto.Adapters.SQL.Sandbox.stop_owner(pid) end)
+
+    # Start each test with an empty (isolated, per config/test.exs) models dir,
+    # so a prior test's downloaded stub doesn't make Models.downloaded?/1 —
+    # which now treats a verified file on disk as downloaded — return true.
+    File.rm_rf(EarWitness.models_dir())
+    File.mkdir_p!(EarWitness.models_dir())
   end
 
   @doc """

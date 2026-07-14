@@ -42,9 +42,20 @@ defmodule EarWitness.Models do
   @spec downloaded?(String.t()) :: boolean()
   def downloaded?(model_id) do
     case Catalog.get_model(model_id) do
-      nil -> false
-      %{bundled: true} -> true
-      _model -> verified_in_db?(model_id)
+      nil ->
+        false
+
+      %{bundled: true} ->
+        true
+
+      model ->
+        # The file is renamed into its final path ONLY after checksum
+        # verification (Downloader.transfer), so its presence there IS proof of
+        # a verified download — and it's the source of truth that survives a
+        # navigate-away, an app restart, or a download that no live view was
+        # watching when it finished. (verified_in_db? is kept as a fallback for
+        # the SetupLive await path's record.) Cheap: no re-hashing on each call.
+        File.exists?(downloaded_path(model)) or verified_in_db?(model_id)
     end
   end
 

@@ -25,5 +25,9 @@ defmodule EarWitness do
   def recordings_dir(), do: Path.join(app_dir(), "recordings")
   def binaries_dir(), do: Path.join([:code.priv_dir(:ear_witness), "binaries"])
   def transcription_id(), do: Path.join(app_dir(), "transcripts")
-  def models_dir(), do: Path.join(app_dir(), "models")
+  # Overridable so tests can point downloaded models at an isolated temp dir
+  # (config/test.exs) — otherwise the download specs write a stub for
+  # large-v3-turbo into the real ~/Documents/Discussit/models and clobber a
+  # genuinely downloaded model. Unset in dev/prod → the real per-user path.
+  def models_dir(), do: Application.get_env(:ear_witness, :models_dir) || Path.join(app_dir(), "models")
 end

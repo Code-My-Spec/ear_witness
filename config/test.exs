@@ -80,5 +80,18 @@ config :ear_witness, :model_checksum_overrides, %{
   "large-v3-turbo" => "011c3bdd860284902853c2591486a51f6f193b152c1817a048d97ab624cb8121"
 }
 
+# Isolate downloaded models to a temp dir per test partition — the download
+# specs write a stub for large-v3-turbo, and without this they'd write it into
+# the real ~/Documents/Discussit/models and clobber a genuinely downloaded
+# model. EarWitnessTest.DataCase.setup_sandbox/1 empties this before each test
+# so a prior test's stub doesn't make Models.downloaded?/1 (which checks the
+# file on disk) return true.
+config :ear_witness,
+       :models_dir,
+       Path.join(
+         System.tmp_dir!(),
+         "ear_witness_test_models#{System.get_env("MIX_TEST_PARTITION")}"
+       )
+
 # Print only warnings and errors during test
 config :logger, level: :debug
