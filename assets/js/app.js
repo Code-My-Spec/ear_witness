@@ -13,6 +13,19 @@ import { LiveSocket } from "phoenix_live_view";
 
 let hooks = {}
 
+// Plays the recording's audio in the transcript editor, seeking to a segment's
+// start when the server pushes "play-segment-audio" (clicking a segment). The
+// click is a user gesture, so browser autoplay policy allows play().
+hooks.SegmentAudio = {
+  mounted() {
+    this.el.src = this.el.dataset.src
+    this.handleEvent("play-segment-audio", ({ at }) => {
+      this.el.currentTime = at
+      this.el.play().catch(() => {})
+    })
+  }
+}
+
 let csrfToken = document.querySelector("meta[name='csrf-token']").getAttribute("content")
 let liveSocket = new LiveSocket("/live", Socket, { params: { _csrf_token: csrfToken }, hooks })
 

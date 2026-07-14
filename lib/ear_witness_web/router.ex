@@ -26,6 +26,8 @@ defmodule EarWitnessWeb.Router do
     live "/recordings/trash", RecordingLive.Index, :trash
     live "/recordings/:id", RecordingLive.Show, :show
     live "/recordings/:id/transcript", TranscriptLive.Editor, :show
+    # Streams a recording's WAV so the editor's <audio> can play/seek it.
+    get "/recordings/:id/audio", RecordingAudioController, :show
     live "/search", SearchLive
     live "/settings", SettingsLive
     live "/setup", SetupLive

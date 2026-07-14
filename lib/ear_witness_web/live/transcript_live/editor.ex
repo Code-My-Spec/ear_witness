@@ -34,6 +34,16 @@ defmodule EarWitnessWeb.TranscriptLive.Editor do
         <option :for={name <- @speaker_names} value={name} />
       </datalist>
 
+      <audio
+        id="segment-audio"
+        phx-hook="SegmentAudio"
+        data-src={~p"/recordings/#{@recording.id}/audio"}
+        preload="metadata"
+        controls
+        class="w-full"
+      >
+      </audio>
+
       <div data-test="transcript" class="space-y-3">
         <%!--
           Several `_spex.exs` scans (story 863) resolve a segment's id by
@@ -156,7 +166,13 @@ defmodule EarWitnessWeb.TranscriptLive.Editor do
 
   @impl true
   def handle_event("play_segment", %{"id" => id}, socket) do
-    {:noreply, assign(socket, :playing_segment_id, String.to_integer(id))}
+    id = String.to_integer(id)
+    at = segment_start_seconds(socket.assigns.segments, id)
+
+    {:noreply,
+     socket
+     |> assign(:playing_segment_id, id)
+     |> push_event("play-segment-audio", %{at: at})}
   end
 
   # Saved on blur (no Save button) — phx-blur delivers the field value as
@@ -235,6 +251,13 @@ defmodule EarWitnessWeb.TranscriptLive.Editor do
     case Enum.find(labeled, fn {label, _speaker} -> label == name end) do
       {_label, speaker} -> speaker.id
       nil -> Speakers.find_or_create_by_name(name).id
+    end
+  end
+
+  defp segment_start_seconds(segments, id) do
+    case Enum.find(segments, &(&1.id == id)) do
+      %{start_offset: ms} -> ms / 1000
+      _ -> 0
     end
   end
 
