@@ -53,8 +53,28 @@ defmodule EarWitnessWeb.RecordingLive.Index do
             >
               delivered
             </div>
+            <div
+              :if={@engine_busy? && !@capturing?}
+              data-test="transcription-busy"
+              class="flex items-center gap-2 text-sm opacity-70"
+            >
+              <span class="loading loading-spinner loading-xs"></span>
+              Transcribing an earlier recording — Record will be available when it finishes.
+            </div>
             <div class="flex gap-2">
-              <button type="button" class="btn btn-primary" phx-click="record" disabled={@capturing?}>
+              <%!--
+                Also disabled while an earlier transcription runs (e.g. an
+                Oban job resumed at boot): all transcription serializes
+                through one gate, so a capture started now would silently
+                queue its live transcript behind the old job — make the
+                wait visible instead.
+              --%>
+              <button
+                type="button"
+                class="btn btn-primary"
+                phx-click="record"
+                disabled={@capturing? || @engine_busy?}
+              >
                 <.icon name="hero-play" class="size-4" /> Record
               </button>
               <button type="button" class="btn" phx-click="stop" disabled={!@capturing?}>
@@ -264,6 +284,8 @@ defmodule EarWitnessWeb.RecordingLive.Index do
 
   @impl true
   def mount(_params, _session, socket) do
+    if connected?(socket), do: Transcription.subscribe_activity()
+
     {:ok,
      socket
      |> assign(
@@ -275,7 +297,8 @@ defmodule EarWitnessWeb.RecordingLive.Index do
        capture_channels: nil,
        capture_notice: nil,
        live_recording_id: nil,
-       live_segments: []
+       live_segments: [],
+       engine_busy?: EarWitness.Transcription.Gate.busy?()
      )
      |> resume_running_capture()
      |> reload_library()
@@ -395,6 +418,10 @@ defmodule EarWitnessWeb.RecordingLive.Index do
       end
 
     {:noreply, assign(socket, :live_segments, segments)}
+  end
+
+  def handle_info({:transcription_activity, %{busy: busy}}, socket) do
+    {:noreply, assign(socket, :engine_busy?, busy)}
   end
 
   def handle_info(_msg, socket), do: {:noreply, socket}

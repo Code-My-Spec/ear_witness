@@ -94,6 +94,30 @@ defmodule EarWitness.Transcription do
     )
   end
 
+  @activity_topic "transcription:activity"
+
+  @doc """
+  Subscribes to `{:transcription_activity, %{busy: boolean()}}` messages —
+  whether ANY transcription (batch job, live window, legacy queue) is
+  running. Backs the recordings view's "transcription in progress" notice
+  and its Record gating: old jobs resuming at boot are invisible otherwise,
+  and a new capture would silently queue its live transcript behind them.
+  """
+  @spec subscribe_activity() :: :ok | {:error, term()}
+  def subscribe_activity do
+    Phoenix.PubSub.subscribe(EarWitness.PubSub, @activity_topic)
+  end
+
+  @doc "Broadcasts engine busy/idle. Called by the transcription gate only."
+  @spec broadcast_activity(boolean()) :: :ok
+  def broadcast_activity(busy) do
+    Phoenix.PubSub.broadcast(
+      EarWitness.PubSub,
+      @activity_topic,
+      {:transcription_activity, %{busy: busy}}
+    )
+  end
+
   @doc """
   Broadcasts `{:live_progress, %{captured_ms: _, transcribed_ms: _}}` to
   `subscribe/1` listeners — how much audio the live capture has produced so

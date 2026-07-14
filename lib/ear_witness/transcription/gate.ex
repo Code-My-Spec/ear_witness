@@ -15,6 +15,8 @@ defmodule EarWitness.Transcription.Gate do
 
   use GenServer
 
+  @busy_table __MODULE__.Busy
+
   def start_link(_opts) do
     GenServer.start_link(__MODULE__, nil, name: __MODULE__)
   end
@@ -29,11 +31,30 @@ defmodule EarWitness.Transcription.Gate do
     GenServer.call(__MODULE__, {:run, fun}, :infinity)
   end
 
+  @doc """
+  Whether a transcription is running right now. Read from ETS, not a call —
+  a call would queue behind the very transcription being asked about.
+  Busy-state changes are also broadcast; see
+  `EarWitness.Transcription.subscribe_activity/0`.
+  """
+  @spec busy?() :: boolean()
+  def busy? do
+    :ets.lookup(@busy_table, :busy) == [busy: true]
+  rescue
+    # Table owner (this gate) isn't running — nothing can be transcribing.
+    ArgumentError -> false
+  end
+
   @impl true
-  def init(nil), do: {:ok, nil}
+  def init(nil) do
+    :ets.new(@busy_table, [:named_table, :public, read_concurrency: true])
+    {:ok, nil}
+  end
 
   @impl true
   def handle_call({:run, fun}, _from, state) do
+    set_busy(true)
+
     result =
       try do
         fun.()
@@ -43,6 +64,12 @@ defmodule EarWitness.Transcription.Gate do
         :exit, reason -> {:error, "transcription crashed: #{inspect(reason)}"}
       end
 
+    set_busy(false)
     {:reply, result, state}
+  end
+
+  defp set_busy(busy) do
+    :ets.insert(@busy_table, {:busy, busy})
+    EarWitness.Transcription.broadcast_activity(busy)
   end
 end

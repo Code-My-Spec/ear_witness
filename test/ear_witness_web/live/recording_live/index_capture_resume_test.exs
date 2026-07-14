@@ -35,6 +35,38 @@ defmodule EarWitnessWeb.RecordingLive.IndexCaptureResumeTest do
     assert transcript.status == :completed
   end
 
+  test "record is disabled with a notice while an earlier transcription runs", %{conn: conn} do
+    alias EarWitness.Transcription.Gate
+
+    # Occupy the gate with a job we control — stands in for an Oban job
+    # resumed at boot, still transcribing an earlier recording.
+    gate_job = Task.async(fn -> Gate.run(fn -> receive do: (:finish -> {:ok, []}) end) end)
+    wait_until(fn -> Gate.busy?() end)
+
+    {:ok, view, _html} = live(conn, "/recordings")
+    assert has_element?(view, ~s([data-test="transcription-busy"]))
+    assert has_element?(view, ~s(button[phx-click="record"][disabled]))
+
+    send(Process.whereis(Gate), :finish)
+    assert {:ok, []} = Task.await(gate_job)
+
+    # busy: false is broadcast before the gate replies, so it's already in
+    # the view's mailbox; render/1 processes it.
+    render(view)
+    refute has_element?(view, ~s([data-test="transcription-busy"]))
+    refute has_element?(view, ~s(button[phx-click="record"][disabled]))
+  end
+
+  defp wait_until(fun, deadline_ms \\ 1_000) do
+    if fun.() do
+      :ok
+    else
+      if deadline_ms <= 0, do: flunk("condition never became true")
+      Process.sleep(10)
+      wait_until(fun, deadline_ms - 10)
+    end
+  end
+
   test "fail_orphaned_transcripts marks stuck :transcribing transcripts failed" do
     {:ok, recording} =
       EarWitness.Recordings.create_recording(%{
