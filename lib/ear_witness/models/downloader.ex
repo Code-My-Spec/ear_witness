@@ -87,8 +87,7 @@ defmodule EarWitness.Models.Downloader do
 
     with :ok <- simulate_interruption(),
          :ok <- File.mkdir_p(Path.dirname(dest_path)),
-         {:ok, body} <- fetch(url),
-         :ok <- File.write(partial_path, body),
+         :ok <- fetch_to_file(model_id, url, partial_path),
          :ok <- report(model_id, %{status: :verifying, percent: 100, error: nil}),
          true <- checksum_of(partial_path) == checksum,
          :ok <- File.rename(partial_path, dest_path) do
@@ -99,17 +98,66 @@ defmodule EarWitness.Models.Downloader do
         report(model_id, %{status: :failed, percent: nil, error: :checksum_mismatch})
 
       {:error, reason} ->
+        File.rm(partial_path)
         report(model_id, %{status: :failed, percent: nil, error: reason})
     end
   end
 
-  defp fetch(url) do
-    case Req.get(url, req_opts()) do
-      {:ok, %Req.Response{status: 200, body: body}} -> {:ok, body}
-      {:ok, %Req.Response{status: status}} -> {:error, {:http_error, status}}
-      {:error, reason} -> {:error, reason}
+  # Streams the body to `partial_path` in chunks, reporting incremental percent
+  # from Content-Length as it arrives — so a multi-gigabyte model shows real
+  # progress instead of sitting at 0% until the whole file lands, and the file
+  # is never held in memory. Progress is only reported when the whole-number
+  # percent changes, so a large download doesn't flood PubSub.
+  defp fetch_to_file(model_id, url, partial_path) do
+    file = File.open!(partial_path, [:write, :binary])
+
+    collector = fn {:data, data}, {req, resp} ->
+      :ok = IO.binwrite(file, data)
+      downloaded = (resp.private[:downloaded] || 0) + byte_size(data)
+      resp = put_in(resp.private[:downloaded], downloaded)
+
+      {:cont, {req, maybe_report_progress(model_id, resp, downloaded)}}
+    end
+
+    try do
+      case Req.get(url, [into: collector] ++ req_opts()) do
+        {:ok, %Req.Response{status: 200}} -> :ok
+        {:ok, %Req.Response{status: status}} -> {:error, {:http_error, status}}
+        {:error, reason} -> {:error, reason}
+      end
+    after
+      File.close(file)
     end
   end
+
+  defp maybe_report_progress(model_id, resp, downloaded) do
+    case content_length(resp) do
+      nil ->
+        resp
+
+      total ->
+        pct = percent(downloaded, total)
+
+        if pct != resp.private[:last_pct] do
+          report(model_id, %{status: :downloading, percent: pct, error: nil})
+          put_in(resp.private[:last_pct], pct)
+        else
+          resp
+        end
+    end
+  end
+
+  defp content_length(resp) do
+    case Req.Response.get_header(resp, "content-length") do
+      [len | _] -> String.to_integer(len)
+      _ -> nil
+    end
+  end
+
+  # Cap at 99 during transfer — 100 is reserved for verify/verified, so the bar
+  # never reads "100%" while the checksum is still being computed.
+  defp percent(_downloaded, total) when total <= 0, do: 0
+  defp percent(downloaded, total), do: min(99, div(downloaded * 100, total))
 
   defp req_opts do
     case Application.get_env(:ear_witness, __MODULE__, []) |> Keyword.get(:plug) do
