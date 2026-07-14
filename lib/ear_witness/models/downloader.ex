@@ -112,11 +112,22 @@ defmodule EarWitness.Models.Downloader do
     file = File.open!(partial_path, [:write, :binary])
 
     collector = fn {:data, data}, {req, resp} ->
-      :ok = IO.binwrite(file, data)
-      downloaded = (resp.private[:downloaded] || 0) + byte_size(data)
-      resp = put_in(resp.private[:downloaded], downloaded)
+      # Req streams intermediate redirect (3xx) response bodies into the SAME
+      # `into:` collector before following them — HuggingFace's `/resolve/main/`
+      # URL 302s to a signed CDN link, and that redirect page ("Found.
+      # Redirecting to …", ~1KB of text) would otherwise be written to the file
+      # ahead of the model bytes, corrupting it and failing the checksum (the
+      # streamed model body itself hashes correctly). Only the final 200 body is
+      # the file, so skip anything else.
+      if resp.status == 200 do
+        :ok = IO.binwrite(file, data)
+        downloaded = (resp.private[:downloaded] || 0) + byte_size(data)
+        resp = put_in(resp.private[:downloaded], downloaded)
 
-      {:cont, {req, maybe_report_progress(model_id, resp, downloaded)}}
+        {:cont, {req, maybe_report_progress(model_id, resp, downloaded)}}
+      else
+        {:cont, {req, resp}}
+      end
     end
 
     try do
