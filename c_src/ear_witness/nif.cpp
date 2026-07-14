@@ -46,6 +46,10 @@ static ERL_NIF_TERM transcribe_files(ErlNifEnv *env, int argc, const ERL_NIF_TER
   return enif_make_string(env, response.c_str(), ERL_NIF_LATIN1);
 }
 
-static ErlNifFunc nif_funcs[] = {{"transcribe_files", 2, transcribe_files}};
+// Whisper inference runs for minutes; on a normal scheduler thread that
+// stalls the VM (GUI, capture timers, everything). Dirty CPU keeps it off
+// the normal schedulers.
+static ErlNifFunc nif_funcs[] = {
+    {"transcribe_files", 2, transcribe_files, ERL_NIF_DIRTY_JOB_CPU_BOUND}};
 
 ERL_NIF_INIT(Elixir.EarWitness.Transcribe, nif_funcs, NULL, NULL, NULL, NULL)

@@ -10,10 +10,15 @@ defmodule EarWitness.Transcription.Engine do
 
   @spec transcribe(Path.t(), keyword()) :: {:ok, [map()]} | {:error, term()}
   def transcribe(audio_path, _opts \\ []) do
-    [audio_path]
-    |> EarWitness.Transcribe.transcribe_files(active_model_path())
-    |> to_string()
-    |> Jason.decode()
+    # Every whisper run loads a full model; concurrent runs (batch imports ×
+    # live capture × legacy queue) can exhaust the machine, so all of them
+    # serialize through the gate.
+    EarWitness.Transcription.Gate.run(fn ->
+      [audio_path]
+      |> EarWitness.Transcribe.transcribe_files(active_model_path())
+      |> to_string()
+      |> Jason.decode()
+    end)
   end
 
   # Resolves the active model's file path for the NIF. Falls back to an

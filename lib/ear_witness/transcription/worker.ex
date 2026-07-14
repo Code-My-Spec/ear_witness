@@ -6,7 +6,7 @@ defmodule EarWitness.Transcription.Worker do
   listeners.
   """
 
-  use Oban.Worker, queue: :default, max_attempts: 3
+  use Oban.Worker, queue: :transcription, max_attempts: 3
 
   alias EarWitness.Recordings.Recording
   alias EarWitness.Repo

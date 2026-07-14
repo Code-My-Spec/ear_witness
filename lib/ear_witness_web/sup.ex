@@ -18,6 +18,7 @@ defmodule EarWitnessWeb.Sup do
       {Registry, keys: :unique, name: EarWitness.Transcription.LiveRegistry},
       {DynamicSupervisor, strategy: :one_for_one, name: EarWitness.Transcription.LiveSupervisor},
       EarWitnessWeb.Endpoint,
+      EarWitness.Transcription.Gate,
       EarWitness.Transcription.Server,
       {Task.Supervisor, name: EarWitness.Models.TaskSupervisor},
       EarWitness.Models.Downloader,

@@ -51,7 +51,11 @@ config :ear_witness, EarWitness.Repo, database: ".config/todo/database.sq3"
 
 config :ear_witness, Oban,
   engine: Oban.Engines.Lite,
-  queues: [default: 10],
+  # Transcription is its own single-slot queue: each whisper run loads a full
+  # model, and concurrent runs have taken the whole machine down. The Gate
+  # (EarWitness.Transcription.Gate) additionally serializes against the live
+  # transcriber, which doesn't go through Oban.
+  queues: [default: 10, transcription: 1],
   repo: EarWitness.Repo
 
 # Transcription engine / diarizer / capture device / bot relay seams
