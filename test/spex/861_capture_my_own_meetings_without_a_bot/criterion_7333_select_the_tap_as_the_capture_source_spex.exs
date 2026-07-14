@@ -1,45 +1,46 @@
 defmodule EarWitnessSpex.CaptureMyOwnMeetingsWithoutABot.Criterion7333Spex do
   @moduledoc """
   Story 861 — Capture my own meetings without a bot
-  Criterion 7333: Select the tap as the capture source
+  Criterion 7333: The system audio tap is captured automatically
 
-  The tap device itself sits behind the `:capture_source` fixture seam
-  (test env exposes a fixture tap device — no real Core Audio tap on CI);
-  the selection flow is driven entirely through the real settings and
-  recording UI.
+  Reframed for the story-872 UAT decision: there is no capture-source picker
+  anymore — every recording captures the microphone AND the system audio tap
+  together (see `EarWitness.Audio.start_capture/1`). "Selecting the tap" is now
+  automatic; settings just states what's captured, and a recording carries both
+  channels. The tap device sits behind the `:capture_source` fixture seam (test
+  env exposes a fixture tap); the flow is driven through the real UI.
   """
 
   use EarWitnessSpex.Case
 
-  spex "Select the tap as the capture source" do
-    scenario "meeting participant switches capture to the system audio tap", context do
+  spex "The system audio tap is captured automatically" do
+    scenario "meeting participant records without choosing a source", context do
       given_ "the tap device is available on this machine", context do
-        # The :fixture capture source (config/test.exs) advertises a tap
-        # device; availability is the seam, the selection below is real UI.
+        # The :fixture capture source (config/test.exs) advertises a tap device.
         context
       end
 
-      when_ "they select the system audio tap in capture settings", context do
-        view = EarWitnessSpex.SettingsSteps.choose_tap_capture_source(context.conn)
+      when_ "they open capture settings", context do
+        {:ok, view, _html} = live(context.conn, "/settings")
         Map.put(context, :settings_view, view)
       end
 
-      then_ "the tap is shown as the active capture source", context do
+      then_ "settings states the microphone and system audio are recorded together", context do
         assert has_element?(
                  context.settings_view,
-                 ~s([data-test="active-capture-source"]),
-                 "tap"
+                 ~s([data-test="capture-sources-summary"]),
+                 "system audio"
                )
 
         :ok
       end
 
-      then_ "the next capture uses the tap as its source", context do
+      then_ "the next capture records both without any source selection", context do
         {:ok, view, _html} = live(context.conn, "/recordings")
         view |> element("button", "Record") |> render_click()
-        view |> element("button", "Stop") |> render_click()
+        html = view |> element("button", "Stop") |> render_click()
 
-        assert has_element?(view, ~s([data-test="recording-source"]), "tap")
+        assert html =~ "microphone + system audio"
         :ok
       end
     end

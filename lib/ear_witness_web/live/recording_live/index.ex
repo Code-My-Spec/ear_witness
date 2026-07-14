@@ -256,10 +256,10 @@ defmodule EarWitnessWeb.RecordingLive.Index do
     """
   end
 
-  # The library only ever distinguishes "captured" for microphone captures
-  # vs. "tap" for system-audio-tap captures (see `Recordings.finish_live_capture/1`);
-  # imported and bot-sourced recordings display their `source` as-is.
-  defp source_label(%{source: :captured, capture_source: :system_audio_tap}), do: "tap"
+  # Every live capture now records the microphone + system audio together (story
+  # 872 UAT), so there's no mic-vs-tap distinction to surface — a captured
+  # recording is just "captured". Imported and bot-sourced recordings display
+  # their `source` as-is.
   defp source_label(%{source: source}), do: to_string(source)
 
   @impl true

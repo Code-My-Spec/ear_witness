@@ -64,6 +64,32 @@ defmodule EarWitness.Audio.Pipeline do
   end
 
   @doc """
+  Starts capturing BOTH the microphone and the system-audio tap at once, mixed
+  into one 16kHz mono track, returning `{:ok, ref, channels}`. Falls back to
+  whichever single source is available — mic-only if the tap isn't installed,
+  tap-only if there's no mic — and only errors when neither exists. `channels`
+  reports what was actually captured (`[:microphone, :system_audio]` for the
+  mixed case). This is the default `EarWitness.Audio.start_capture/1` path.
+  """
+  @spec capture_both(Path.t()) ::
+          {:ok, reference(), [:microphone | :system_audio]}
+          | {:error, :no_input_device}
+  def capture_both(path) do
+    # What's available drives what we record — and which single source we fall
+    # back to. Honored uniformly across the fixture, spec, and real backends
+    # (the fixture seams reflect `capture_devices_override` / `tap_installed_override`).
+    mic? = input_devices() != []
+    tap? = Tap.installed?()
+
+    cond do
+      mic? and tap? -> start(:both, path)
+      mic? -> start(:microphone, path)
+      tap? -> start(:system_audio_only, path)
+      true -> {:error, :no_input_device}
+    end
+  end
+
+  @doc """
   Returns `{:ok, handle}` with the native capture handle for a running real
   capture `ref`, or `:error` for an unknown `ref` or a `:fixture` capture
   (which has no device handle). Backs `EarWitness.Audio.capture_handle/1`.
@@ -204,11 +230,39 @@ defmodule EarWitness.Audio.Pipeline do
     end
   end
 
-  # System-audio-tap capture is loopback-only for now (Windows WASAPI
-  # loopback, Linux PulseAudio/PipeWire monitor source, macOS Core Audio
-  # process tap — see the miniaudio-capture and macos-system-audio-tap ADRs);
-  # it does not additionally mix in the microphone, unlike the `:fixture`
-  # seam's simulated `[:microphone, :system_audio]` double channel.
+  # Both sources: microphone AND the system-audio tap concurrently, mixed by the
+  # NIF into one 16kHz mono WAV (see start_duplex_capture/2 + mix_duplex in
+  # audio_capture.cpp). Duplex is macOS-only; if the NIF can't (other platforms,
+  # or the tap racing to unavailable) it falls back to mic-only so the user
+  # still gets a recording.
+  defp start_real(:both, path) do
+    [device | _] = input_devices()
+
+    case Miniaudio.start_duplex_capture(device_index(device), path) do
+      {:ok, handle} ->
+        ref = make_ref()
+
+        Captures.put(ref, %{
+          kind: :real,
+          capture_handle: handle,
+          path: path,
+          channels: [:microphone, :system_audio]
+        })
+
+        {:ok, ref, [:microphone, :system_audio]}
+
+      {:error, _reason} ->
+        start_real(:microphone, path)
+    end
+  end
+
+  # Tap-only — the no-microphone fallback of capture_both/1. Same loopback path
+  # as :system_audio_tap, reported as the single :system_audio channel.
+  defp start_real(:system_audio_only, path), do: start_real(:system_audio_tap, path)
+
+  # System-audio-tap capture is loopback-only (Windows WASAPI loopback, Linux
+  # PulseAudio/PipeWire monitor source, macOS Core Audio process tap — see the
+  # miniaudio-capture and macos-system-audio-tap ADRs).
   defp start_real(:system_audio_tap, path) do
     case Miniaudio.start_loopback_capture(path) do
       {:ok, handle} ->
@@ -233,6 +287,8 @@ defmodule EarWitness.Audio.Pipeline do
 
   defp channels_for(:microphone), do: [:microphone]
   defp channels_for(:system_audio_tap), do: [:microphone, :system_audio]
+  defp channels_for(:system_audio_only), do: [:system_audio]
+  defp channels_for(:both), do: [:microphone, :system_audio]
 
   defp fixture_wav do
     channels = 1

@@ -98,8 +98,14 @@ defmodule EarWitness.Audio do
   end
 
   @doc """
-  Starts live capture on the active capture source under the active
-  consent policy, writing to `path`.
+  Starts live capture under the active consent policy, writing to `path`.
+
+  Always records BOTH the microphone and the system-audio tap, mixed into one
+  16kHz mono track ("both sides of a call"): your voice via the mic + the other
+  party via system output. Falls back gracefully when only one source is
+  available — mic-only if the tap isn't set up, tap-only if there's no mic — and
+  reports which channels were actually captured. There is no capture-source
+  choice to make; the returned `channels` say what landed in the recording.
   """
   @spec start_capture(Path.t()) ::
           {:ok,
@@ -111,7 +117,7 @@ defmodule EarWitness.Audio do
           | {:error, :no_input_device | :notice_undelivered | :source_unavailable}
   def start_capture(path) do
     with {:ok, notice} <- ConsentPolicy.authorize(get_consent_policy()),
-         {:ok, ref, channels} <- Pipeline.capture(get_active_capture_source(), path) do
+         {:ok, ref, channels} <- Pipeline.capture_both(path) do
       {:ok, %{ref: ref, channels: channels, notice: notice}}
     end
   end

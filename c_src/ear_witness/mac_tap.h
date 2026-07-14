@@ -40,6 +40,13 @@ int ew_mac_tap_stop(void *handle);
 // one; safe to call any time between start and stop.
 bool ew_mac_tap_read_new(void *handle, int16_t **out_samples, size_t *out_count);
 
+// Stops the tap device and flushes its IO queue so no more samples arrive,
+// WITHOUT writing a WAV or freeing the handle — the buffer stays intact and
+// drainable. Used by the duplex (mic + system-audio) capture path, which mixes
+// the tap's final samples with the microphone itself and writes one combined
+// WAV, then calls ew_mac_tap_free. Idempotent.
+void ew_mac_tap_quiesce(void *handle);
+
 // Tears down the Core Audio objects and frees the handle WITHOUT writing a
 // WAV — the discard path (used by the resource destructor if a capture is
 // garbage-collected without an explicit stop, so the private aggregate device

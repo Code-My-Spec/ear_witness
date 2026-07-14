@@ -64,10 +64,19 @@ struct CaptureState {
   std::vector<ma_int16> samples;
   // Count of samples already handed out by capture_read_new/1 — the live
   // transcriber's drain cursor. Only advanced under `mutex`; never rewinds
-  // `samples`, so stop_capture/1 still writes the identical full WAV.
+  // `samples`, so stop_capture/1 still writes the identical full WAV. For a
+  // duplex capture it indexes `mixed` instead.
   size_t read_cursor = 0;
   std::string path;
   bool device_initialized = false;
+  // Duplex (microphone + system-audio tap) capture: the mic streams into
+  // `samples` via data_callback (as usual) while `mac_tap_handle` streams the
+  // system audio into the tap's own buffer; mix_duplex sums the two,
+  // index-aligned, into `mixed`, which read_new/stop then serve/finalize. Empty
+  // and unused for single-source captures.
+  bool duplex = false;
+  std::vector<ma_int16> tap_buffer;  // system-audio samples drained from the tap
+  std::vector<ma_int16> mixed;       // mic + system audio, summed and clamped
   // Non-null when this capture is a macOS Core Audio process tap rather than a
   // miniaudio device (see mac_tap.mm). The tap owns its own sample buffer,
   // conversion, and WAV finalize; stop_capture/1 and the resource destructor
@@ -199,6 +208,69 @@ ERL_NIF_TERM start_device(ErlNifEnv *env, ma_device_type device_type, const ma_d
   enif_release_resource(resource_mem);
   return make_ok(env, resource_term);
 }
+
+ma_int16 clamp_s16(int32_t v) {
+  if (v > 32767) return 32767;
+  if (v < -32768) return -32768;
+  return static_cast<ma_int16>(v);
+}
+
+// Resolves the capture device at `device_index` (as enumerated by
+// list_devices/0) to its ma_device_id. Returns false — leaving *out_id
+// untouched — for a negative index or if the list shifted, so the caller falls
+// back to the platform default device.
+bool resolve_capture_device_id(int device_index, ma_device_id *out_id) {
+  if (device_index < 0) {
+    return false;
+  }
+  DeviceLister lister;
+  if (!lister.initialized) {
+    return false;
+  }
+  ma_device_info *capture_infos = nullptr;
+  ma_uint32 capture_count = 0;
+  ma_device_info *playback_infos = nullptr;
+  ma_uint32 playback_count = 0;
+  if (ma_context_get_devices(&lister.context, &playback_infos, &playback_count, &capture_infos,
+                              &capture_count) != MA_SUCCESS ||
+      static_cast<ma_uint32>(device_index) >= capture_count) {
+    return false;
+  }
+  *out_id = capture_infos[device_index].id;
+  return true;
+}
+
+#ifdef __APPLE__
+// Mixes the microphone (state->samples) with the system-audio tap into
+// state->mixed, index-aligned — both are 16kHz mono s16 captured from
+// near-simultaneous starts, so sample i of each is ~the same instant. During
+// capture (`final` false) it mixes only up to the shorter of the two streams so
+// they stay aligned as they grow; at stop (`final` true) it mixes the whole of
+// both, treating the shorter one's missing tail as silence so no audio is lost.
+// Consumer-only (read_new/stop, never the audio thread); reads state->samples
+// under state->mutex.
+void mix_duplex(CaptureState *state, bool final) {
+  if (state->mac_tap_handle != nullptr) {
+    int16_t *tap_new = nullptr;
+    size_t tap_count = 0;
+    if (ew_mac_tap_read_new(state->mac_tap_handle, &tap_new, &tap_count) && tap_count > 0) {
+      state->tap_buffer.insert(state->tap_buffer.end(), tap_new, tap_new + tap_count);
+      std::free(tap_new);
+    }
+  }
+
+  std::lock_guard<std::mutex> lock(state->mutex);
+  size_t mic_n = state->samples.size();
+  size_t tap_n = state->tap_buffer.size();
+  size_t target = final ? (mic_n > tap_n ? mic_n : tap_n) : (mic_n < tap_n ? mic_n : tap_n);
+  state->mixed.reserve(target);
+  for (size_t i = state->mixed.size(); i < target; ++i) {
+    int32_t m = i < mic_n ? state->samples[i] : 0;
+    int32_t t = i < tap_n ? state->tap_buffer[i] : 0;
+    state->mixed.push_back(clamp_s16(m + t));
+  }
+}
+#endif
 
 // Case-insensitive substring search — used to spot PulseAudio/PipeWire
 // "Monitor of ..." capture devices, which is how Linux loopback capture
@@ -497,6 +569,78 @@ static ERL_NIF_TERM nif_start_loopback_capture(ErlNifEnv *env, int argc, const E
 #endif
 }
 
+// Starts a DUPLEX capture — the microphone AND the system-audio tap at once,
+// mixed into one 16kHz mono PCM16 stream ("both sides of a call": your voice via
+// the mic + the other party via system output). The mic streams into
+// state->samples; the tap into its own buffer; read_new/stop mix them
+// (mix_duplex). macOS only — miniaudio has no macOS loopback backend, so this
+// needs the Core Audio process tap; other platforms report source_unavailable
+// and the caller falls back to a single source.
+static ERL_NIF_TERM nif_start_duplex_capture(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[]) {
+  (void)argc;
+
+  int device_index;
+  std::string path;
+  if (!enif_get_int(env, argv[0], &device_index) || !get_path(env, argv[1], &path)) {
+    return enif_make_badarg(env);
+  }
+
+#ifdef __APPLE__
+  void *resource_mem = enif_alloc_resource(g_capture_resource_type, sizeof(CaptureState));
+  auto *state = new (resource_mem) CaptureState();
+  state->path = path;
+  state->duplex = true;
+
+  // 1. System-audio tap (its own buffer; mix_duplex drains + mixes it). The
+  //    path handed to the tap is unused — this capture writes the mixed WAV
+  //    itself in stop_capture/1, and tears the tap down via quiesce + free.
+  state->mac_tap_handle = ew_mac_tap_start(path.c_str());
+  if (state->mac_tap_handle == nullptr) {
+    enif_release_resource(resource_mem);
+    return make_error(env, "source_unavailable");
+  }
+
+  // 2. Microphone device into state->samples (same 16kHz mono s16 as the tap).
+  ma_device_id resolved_id;
+  const ma_device_id *device_id =
+      resolve_capture_device_id(device_index, &resolved_id) ? &resolved_id : nullptr;
+
+  ma_device_config config = ma_device_config_init(ma_device_type_capture);
+  config.capture.pDeviceID = device_id;
+  config.capture.format = ma_format_s16;
+  config.capture.channels = kChannels;
+  config.capture.shareMode = ma_share_mode_shared;
+  config.sampleRate = kSampleRate;
+  config.dataCallback = data_callback;
+  config.pUserData = state;
+
+  if (ma_device_init(nullptr, &config, &state->device) != MA_SUCCESS) {
+    ew_mac_tap_free(state->mac_tap_handle);
+    state->mac_tap_handle = nullptr;
+    enif_release_resource(resource_mem);
+    return make_error(env, "device_init_failed");
+  }
+  state->device_initialized = true;
+
+  if (ma_device_start(&state->device) != MA_SUCCESS) {
+    ma_device_uninit(&state->device);
+    state->device_initialized = false;
+    ew_mac_tap_free(state->mac_tap_handle);
+    state->mac_tap_handle = nullptr;
+    enif_release_resource(resource_mem);
+    return make_error(env, "device_start_failed");
+  }
+
+  ERL_NIF_TERM resource_term = enif_make_resource(env, resource_mem);
+  enif_release_resource(resource_mem);
+  return make_ok(env, resource_term);
+#else
+  (void)device_index;
+  (void)path;
+  return make_error(env, "source_unavailable");
+#endif
+}
+
 static ERL_NIF_TERM nif_stop_capture(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[]) {
   (void)argc;
 
@@ -506,6 +650,29 @@ static ERL_NIF_TERM nif_stop_capture(ErlNifEnv *env, int argc, const ERL_NIF_TER
   }
 
 #ifdef __APPLE__
+  // Duplex (mic + system-audio tap): stop both sources, mix the remainder, and
+  // write ONE combined 16kHz mono WAV. Checked before the tap-only branch since
+  // a duplex capture also carries a mac_tap_handle.
+  if (state->duplex) {
+    if (state->device_initialized) {
+      ma_device_stop(&state->device);
+      ma_device_uninit(&state->device);
+      state->device_initialized = false;
+    }
+    if (state->mac_tap_handle != nullptr) {
+      ew_mac_tap_quiesce(state->mac_tap_handle);
+    }
+
+    mix_duplex(state, /*final=*/true);
+    bool wrote = ear_witness::write_wav_s16(state->path, state->mixed);
+
+    if (state->mac_tap_handle != nullptr) {
+      ew_mac_tap_free(state->mac_tap_handle);
+      state->mac_tap_handle = nullptr;
+    }
+    return wrote ? enif_make_atom(env, "ok") : make_error(env, "write_failed");
+  }
+
   // macOS tap capture: hand off to the native tap, which stops the device,
   // converts + writes the shared 16kHz mono WAV, and tears down its Core Audio
   // objects. Same Elixir surface as the mic path — stop_capture/1 works for
@@ -556,6 +723,24 @@ static ERL_NIF_TERM nif_capture_read_new(ErlNifEnv *env, int argc, const ERL_NIF
   }
 
 #ifdef __APPLE__
+  // Duplex (mic + system-audio tap): mix whatever is newly available from both
+  // sources, then serve the newly-mixed samples. `mixed` is consumer-owned
+  // (only mix_duplex grows it, and we are the sole consumer), so it needs no
+  // lock against the audio thread here. Checked before the tap-only branch
+  // since a duplex capture also carries a mac_tap_handle.
+  if (state->duplex) {
+    mix_duplex(state, /*final=*/false);
+    size_t total = state->mixed.size();
+    size_t new_count = state->read_cursor < total ? total - state->read_cursor : 0;
+    ERL_NIF_TERM bin_term;
+    unsigned char *buffer = enif_make_new_binary(env, new_count * sizeof(ma_int16), &bin_term);
+    if (new_count > 0) {
+      std::memcpy(buffer, state->mixed.data() + state->read_cursor, new_count * sizeof(ma_int16));
+      state->read_cursor = total;
+    }
+    return make_ok(env, bin_term);
+  }
+
   // macOS system-output tap: its samples live in the tap's own buffer, not
   // state->samples, so drain them through the tap's C interface (mirroring how
   // stop_capture/1 routes to ew_mac_tap_stop). A null handle (already stopped)
@@ -742,6 +927,7 @@ static ErlNifFunc nif_funcs[] = {
     {"list_devices", 0, nif_list_devices},
     {"start_capture", 2, nif_start_capture},
     {"start_loopback_capture", 1, nif_start_loopback_capture},
+    {"start_duplex_capture", 2, nif_start_duplex_capture},
     {"stop_capture", 1, nif_stop_capture},
     {"read_new", 1, nif_capture_read_new},
     {"loopback_available?", 0, nif_loopback_available},

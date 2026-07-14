@@ -286,14 +286,14 @@ void *ew_mac_tap_start(const char *path) {
   }
 }
 
-int ew_mac_tap_stop(void *handle) {
+void ew_mac_tap_quiesce(void *handle) {
   auto *cap = static_cast<MacTapCapture *>(handle);
   if (cap == nullptr) {
-    return -1;
+    return;
   }
 
   // Stop the device first so the IOProc quiesces, then flush any in-flight
-  // callback on the serial IO queue so no more appends race the write.
+  // callback on the serial IO queue so no more appends race a later read/write.
   if (cap->aggregate != kAudioObjectUnknown && cap->io_proc != nullptr) {
     AudioDeviceStop(cap->aggregate, cap->io_proc);
     AudioDeviceDestroyIOProcID(cap->aggregate, cap->io_proc);
@@ -303,6 +303,15 @@ int ew_mac_tap_stop(void *handle) {
     dispatch_sync(cap->io_queue, ^{
                   });  // barrier: any queued IOProc block has finished
   }
+}
+
+int ew_mac_tap_stop(void *handle) {
+  auto *cap = static_cast<MacTapCapture *>(handle);
+  if (cap == nullptr) {
+    return -1;
+  }
+
+  ew_mac_tap_quiesce(cap);
 
   bool wrote;
   {

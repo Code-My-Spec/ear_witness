@@ -27,16 +27,14 @@ defmodule EarWitnessSpex.SettingsSteps do
   end
 
   @doc """
-  Opens settings and selects the system audio tap as the capture source
-  through the real form. Returns the settings view.
+  Opens settings. Kept for the many capture scenarios that begin "the tap is the
+  active capture source": there is no source to pick anymore — every recording
+  captures the microphone and system audio together (story 872 UAT), so that
+  precondition is automatically satisfied and this just returns the settings
+  view. (Name retained so those specs read unchanged.)
   """
   def choose_tap_capture_source(conn) do
     {:ok, view, _html} = live(conn, "/settings")
-
-    view
-    |> form(~s([data-test="capture-source-form"]), %{"source" => "tap"})
-    |> render_change()
-
     view
   end
 

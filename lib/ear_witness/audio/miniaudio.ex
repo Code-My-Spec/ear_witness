@@ -75,6 +75,22 @@ defmodule EarWitness.Audio.Miniaudio do
   def start_loopback_capture(_path), do: :erlang.nif_error(:nif_library_not_loaded)
 
   @doc """
+  Starts a DUPLEX capture — the microphone at `device_index` AND the
+  system-output tap at once, mixed into one 16kHz mono PCM16 stream ("both
+  sides of a call": your voice via the mic + the other party via system audio).
+  The finished WAV at `path` is a normal 16kHz mono PCM16 file, identical in
+  shape to a single-source capture, so transcription and the live transcriber's
+  drain path work unchanged.
+
+  macOS only (it needs the Core Audio process tap, since miniaudio has no macOS
+  loopback backend); other platforms return `{:error, :source_unavailable}` and
+  the caller falls back to a single source.
+  """
+  @spec start_duplex_capture(non_neg_integer(), Path.t()) :: {:ok, term()} | {:error, atom()}
+  def start_duplex_capture(_device_index, _path),
+    do: :erlang.nif_error(:nif_library_not_loaded)
+
+  @doc """
   Stops a capture started by `start_capture/2` or
   `start_loopback_capture/1`, finalizing its WAV file at the path given to
   the start call.

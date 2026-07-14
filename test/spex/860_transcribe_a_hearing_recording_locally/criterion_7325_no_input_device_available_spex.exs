@@ -7,11 +7,15 @@ defmodule EarWitnessSpex.TranscribeAHearingRecordingLocally.Criterion7325Spex do
   use EarWitnessSpex.Case
 
   spex "No input device available" do
-    scenario "hearing documenter tries to record live audio with no microphone connected",
+    scenario "hearing documenter tries to record with no capture device at all",
              context do
-      given_ "the recordings library is open on a machine with no audio input device",
+      given_ "the recordings library is open on a machine with no mic and no system-audio tap",
               context do
+        # Capture now records mic + system audio together and falls back to
+        # whichever single source exists, so "no input device" means BOTH are
+        # unavailable — no microphone and no tap.
         EarWitnessSpex.Fixtures.simulate_no_input_devices()
+        EarWitnessSpex.Fixtures.simulate_tap_not_installed()
         {:ok, view, _html} = live(context.conn, "/recordings")
         Map.put(context, :view, view)
       end

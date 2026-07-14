@@ -1,9 +1,9 @@
 defmodule EarWitnessWeb.SettingsLive do
   @moduledoc """
-  Capture settings — pick the active capture source (microphone or the
-  system audio tap) and the recording consent/notification policy, with
-  a plain-language explanation of what each policy means and guided
-  setup when the tap isn't available on this machine.
+  Capture settings — every recording captures the microphone and the system
+  audio tap together (there's no source to pick), so this shows what's captured
+  and guided setup when the tap isn't available, plus the recording
+  consent/notification policy with a plain-language explanation of each.
   """
 
   use EarWitnessWeb, :live_view
@@ -13,7 +13,7 @@ defmodule EarWitnessWeb.SettingsLive do
   @impl true
   def mount(_params, _session, socket) do
     if connected?(socket), do: Models.subscribe()
-    {:ok, socket |> assign(tap_setup_needed: false) |> reload_settings()}
+    {:ok, reload_settings(socket)}
   end
 
   @impl true
@@ -25,40 +25,19 @@ defmodule EarWitnessWeb.SettingsLive do
       <div class="card bg-base-100 border border-base-300 shadow-sm">
         <div class="card-body">
           <h2 class="card-title">
-            <.icon name="hero-microphone" class="size-5 text-primary" /> Capture source
+            <.icon name="hero-microphone" class="size-5 text-primary" /> Capture
           </h2>
-          <p class="text-sm opacity-70">
-            Active source: <span data-test="active-capture-source" class="font-medium">{source_label(@active_source)}</span>
+          <p data-test="capture-sources-summary" class="text-sm opacity-70">
+            Records your microphone + system audio together — both sides of a call in one
+            recording. There's nothing to choose: every recording captures both when the system
+            audio tap is set up.
           </p>
-
-          <form id="capture-source-form" data-test="capture-source-form" phx-change="select_source" class="space-y-3">
-            <div
-              :for={source <- @capture_sources}
-              data-test="capture-source-option"
-              data-source={source_value(source.type)}
-            >
-              <label class="flex items-center gap-2">
-                <input
-                  type="radio"
-                  name="source"
-                  value={source_value(source.type)}
-                  checked={source.type == @active_source}
-                  class="radio radio-sm"
-                />
-                {source.name}
-                <span :if={!source.available} class="badge badge-ghost badge-sm">not set up</span>
-              </label>
-              <p data-test="capture-source-help" class="pl-6 text-sm opacity-70">
-                {source_description(source.type)}
-              </p>
-            </div>
-          </form>
 
           <div :if={@tap_setup_needed} data-test="tap-setup-guide" class="alert alert-warning">
             <.icon name="hero-exclamation-triangle" class="size-5" />
-            The system audio tap isn't set up on this machine yet. Install and enable it in your
-            operating system's audio settings, then come back and select it here — the tap is
-            never activated automatically.
+            The system audio tap isn't set up on this machine yet, so recordings capture your
+            microphone only. Install and enable it in your operating system's audio settings to
+            capture the other side of a call too.
           </div>
         </div>
       </div>
@@ -222,22 +201,6 @@ defmodule EarWitnessWeb.SettingsLive do
   end
 
   @impl true
-  def handle_event("select_source", %{"source" => source}, socket) do
-    case Audio.set_active_capture_source(parse_source(source)) do
-      {:ok, active} ->
-        {:noreply,
-         socket
-         |> assign(active_source: active, tap_setup_needed: false)
-         |> assign(capture_sources: Audio.list_capture_sources())}
-
-      {:error, :source_unavailable} ->
-        {:noreply,
-         socket
-         |> assign(tap_setup_needed: parse_source(source) == :system_audio_tap)
-         |> assign(capture_sources: Audio.list_capture_sources())}
-    end
-  end
-
   def handle_event("select_policy", %{"policy" => policy}, socket) do
     {:ok, active} = Audio.set_consent_policy(String.to_existing_atom(policy))
     {:noreply, assign(socket, consent_policy: active)}
@@ -285,10 +248,14 @@ defmodule EarWitnessWeb.SettingsLive do
   defp reload_settings(socket) do
     {policies, disclaimer} = Audio.list_consent_policies()
 
+    # Every capture records both sources; the only thing worth showing is whether
+    # the system audio tap is set up (so the user knows it's mic-only until then).
+    tap_available? =
+      Enum.any?(Audio.list_capture_sources(), &(&1.type == :system_audio_tap and &1.available))
+
     socket
     |> assign(
-      capture_sources: Audio.list_capture_sources(),
-      active_source: Audio.get_active_capture_source(),
+      tap_setup_needed: not tap_available?,
       consent_policies: policies,
       policy_disclaimer: disclaimer,
       consent_policy: Audio.get_consent_policy(),
@@ -334,24 +301,4 @@ defmodule EarWitnessWeb.SettingsLive do
     do: "#{round(bytes / 1_000_000)} MB"
 
   defp format_size(bytes), do: "#{round(bytes / 1_000)} KB"
-
-  defp source_value(:microphone), do: "microphone"
-  defp source_value(:system_audio_tap), do: "tap"
-
-  defp source_description(:microphone),
-    do:
-      "Records your default microphone — your own voice and whatever else the mic " <>
-        "picks up in the room."
-
-  defp source_description(:system_audio_tap),
-    do:
-      "Records everything your computer plays out loud — both sides of a call, videos, " <>
-        "any app's sound. It taps your whole system output, so there's no single device " <>
-        "to pick; whatever you hear is what gets recorded."
-
-  defp source_label(:microphone), do: "microphone"
-  defp source_label(:system_audio_tap), do: "tap"
-
-  defp parse_source("microphone"), do: :microphone
-  defp parse_source("tap"), do: :system_audio_tap
 end
