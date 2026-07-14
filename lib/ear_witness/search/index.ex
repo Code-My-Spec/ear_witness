@@ -102,6 +102,19 @@ defmodule EarWitness.Search.Index do
     |> Enum.sort_by(& &1.rank)
   end
 
+  @doc """
+  Distinct speaker labels present across every indexed segment — each speaker
+  the app has actually attributed speech to (named speakers like "Tenant" AND
+  the generic "Speaker N" labels), so the search speaker filter offers the
+  speakers that really exist rather than only the named ones.
+  """
+  @spec list_speakers() :: [String.t()]
+  def list_speakers do
+    "SELECT DISTINCT speaker FROM search_segments WHERE speaker IS NOT NULL AND speaker != '' ORDER BY speaker"
+    |> query!([])
+    |> Enum.map(fn [speaker] -> speaker end)
+  end
+
   # -- segment matches ------------------------------------------------------
 
   defp segment_rows(fts_query, opts, {date_sql, date_params}) do

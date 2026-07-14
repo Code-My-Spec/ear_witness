@@ -50,6 +50,13 @@ defmodule EarWitness.Search do
   participant list) changes.
   """
   @spec index_recording(Recording.t()) :: :ok
+  @doc """
+  Distinct speaker labels found across all transcripts — the set the /search
+  speaker filter should offer (named speakers and generic "Speaker N" alike).
+  """
+  @spec list_speakers() :: [String.t()]
+  def list_speakers, do: Index.list_speakers()
+
   def index_recording(%Recording{id: id}) do
     {:ok, %Recording{title: title, collections: collections}} = Recordings.get_recording(id)
 

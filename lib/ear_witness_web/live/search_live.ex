@@ -6,7 +6,7 @@ defmodule EarWitnessWeb.SearchLive do
 
   use EarWitnessWeb, :live_view
 
-  alias EarWitness.{Search, Speakers}
+  alias EarWitness.Search
   alias EarWitnessWeb.RecordingLive.Format
 
   @impl true
@@ -100,7 +100,7 @@ defmodule EarWitnessWeb.SearchLive do
      assign(socket,
        query: "",
        filters: %{"speaker" => "", "from" => "", "to" => ""},
-       speaker_options: Speakers.list_speaker_names(),
+       speaker_options: Search.list_speakers(),
        results: []
      )}
   end
