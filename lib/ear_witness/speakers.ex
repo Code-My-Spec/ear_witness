@@ -47,9 +47,20 @@ defmodule EarWitness.Speakers do
   speaker, for overlapping/unclear speech), unless the transcript has
   already been diarized. Safe to call every time the transcript editor
   mounts.
+
+  A transcript that isn't `:completed` is skipped without being marked:
+  during live capture only transcription runs in real time — segmentation
+  and clustering wait for the recording to finish. Diarizing mid-capture
+  would burn heavy ONNX compute alongside the live whisper loop, and since
+  the capture WAV is empty until stop, the diarizer's error path would
+  stamp `diarized_at` and silently disable the real post-stop pass.
   """
   @spec diarize_transcript(Transcript.t()) :: :ok
   def diarize_transcript(%Transcript{diarized_at: diarized_at}) when not is_nil(diarized_at) do
+    :ok
+  end
+
+  def diarize_transcript(%Transcript{status: status}) when status != :completed do
     :ok
   end
 
