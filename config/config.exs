@@ -18,10 +18,12 @@ config :tailwind,
     cd: Path.expand("..", __DIR__)
   ]
 
+# No :backends key — it is deprecated and, on Elixir 1.20, setting it
+# silently disables the default handler entirely (no console logs at all,
+# which hid LiveView crash reports in dev).
 config :logger,
   handle_otp_reports: true,
-  handle_sasl_reports: false,
-  backends: [:console]
+  handle_sasl_reports: false
 
 config :logger, :console,
   level: :notice,

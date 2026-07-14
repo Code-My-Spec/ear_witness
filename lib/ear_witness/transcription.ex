@@ -13,6 +13,24 @@ defmodule EarWitness.Transcription do
   alias EarWitness.Transcription.{Segment, Transcript, Worker}
 
   @doc """
+  Marks transcripts stuck `:transcribing` as `:failed` so the recording
+  shows a Retry button instead of an eternal spinner. Run once at GUI boot:
+  nothing can be transcribing yet, so any `:transcribing` row is an orphan —
+  a crash, kill, or lost live capture ended its run mid-flight. Returns the
+  number of transcripts reconciled.
+  """
+  @spec fail_orphaned_transcripts() :: non_neg_integer()
+  def fail_orphaned_transcripts do
+    {count, _} =
+      Repo.update_all(
+        from(t in Transcript, where: t.status == :transcribing),
+        set: [status: :failed]
+      )
+
+    count
+  end
+
+  @doc """
   Starts transcription for a recording as a durable background job. Safe
   to call once per recording — reopening a recording that already has a
   transcript never re-queues work.

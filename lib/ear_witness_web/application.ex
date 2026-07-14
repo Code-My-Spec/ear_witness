@@ -45,6 +45,13 @@ defmodule EarWitnessWeb.Application do
       {:ok, _} = Supervisor.start_child(sup, {EarWitnessWeb.McpServer.Server, transport: :stdio})
       {:ok, sup}
     else
+      # A crash/kill mid-transcription (batch or live) leaves transcripts
+      # stuck :transcribing — eternal spinner, no retry. Nothing is running
+      # yet at this point, so reconcile the orphans. GUI boot only: an MCP
+      # stdio subprocess shares this DB while a GUI instance may genuinely
+      # be mid-transcription.
+      EarWitness.Transcription.fail_orphaned_transcripts()
+
       {:ok, _} = Supervisor.start_child(sup, EarWitnessWeb.Sup)
 
       {:ok, _} =

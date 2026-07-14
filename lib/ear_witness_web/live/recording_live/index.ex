@@ -277,8 +277,38 @@ defmodule EarWitnessWeb.RecordingLive.Index do
        live_recording_id: nil,
        live_segments: []
      )
+     |> resume_running_capture()
      |> reload_library()
      |> allow_upload(:audio_file, accept: ~w(.wav), max_entries: 1)}
+  end
+
+  # Picks a still-running capture back up on mount. Capture state used to
+  # live only in this view's assigns, so any remount (dev live-reload,
+  # navigating away and back, a webview reload, an LV crash) reset the UI to
+  # an idle Record button while the capture kept running — impossible to
+  # stop, transcript stuck :transcribing forever.
+  defp resume_running_capture(socket) do
+    case Recordings.running_live_capture() do
+      nil ->
+        socket
+
+      %{ref: ref, channels: channels, recording_id: recording_id} ->
+        if connected?(socket), do: Transcription.subscribe(recording_id)
+
+        segments =
+          case Transcription.get_transcript_for_recording(recording_id) do
+            {:ok, transcript} -> transcript.segments
+            _ -> []
+          end
+
+        assign(socket,
+          capturing?: true,
+          capture_ref: ref,
+          capture_channels: channels,
+          live_recording_id: recording_id,
+          live_segments: segments
+        )
+    end
   end
 
   @impl true

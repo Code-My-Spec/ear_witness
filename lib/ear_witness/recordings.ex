@@ -289,6 +289,30 @@ defmodule EarWitness.Recordings do
     end
   end
 
+  @doc """
+  The currently running device-backed capture, if any, as
+  `%{ref: _, channels: _, recording_id: _}` — or `nil`.
+
+  Backs UI rehydration: capture state used to live only in the recordings
+  LiveView's assigns, so any remount (dev live-reload, navigating away and
+  back, a webview reload, an LV crash) showed an idle Record button while
+  the capture kept running with no way to stop it, leaving the transcript
+  stuck `:transcribing` forever. A mounting view calls this to pick the
+  running capture back up. Fixture (create-on-stop) captures have no
+  recording row yet and are not reported.
+  """
+  @spec running_live_capture() ::
+          %{ref: reference(), channels: [atom()], recording_id: integer()} | nil
+  def running_live_capture do
+    EarWitness.Audio.Captures.all()
+    |> Enum.find_value(fn {ref, %{path: path, channels: channels}} ->
+      case Repo.get_by(Recording, file_path: path) do
+        %Recording{id: id} -> %{ref: ref, channels: channels, recording_id: id}
+        nil -> nil
+      end
+    end)
+  end
+
   @doc "Stops a running live capture and registers the finished file as a new recording."
   @spec finish_live_capture(reference()) ::
           {:ok, Recording.t(), [atom()]} | {:error, :invalid_audio_file | Ecto.Changeset.t()}
