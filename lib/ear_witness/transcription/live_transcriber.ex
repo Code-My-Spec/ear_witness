@@ -182,14 +182,14 @@ defmodule EarWitness.Transcription.LiveTranscriber do
 
   @impl true
   def handle_info(:drain, state) do
-    state = state |> drain() |> process_ready()
+    state = state |> drain() |> process_ready() |> broadcast_progress()
     schedule_drain(state)
     {:noreply, state}
   end
 
   @impl true
   def handle_call(:flush, _from, state) do
-    {:reply, :ok, state |> drain() |> process_ready()}
+    {:reply, :ok, state |> drain() |> process_ready() |> broadcast_progress()}
   end
 
   @impl true
@@ -202,6 +202,20 @@ defmodule EarWitness.Transcription.LiveTranscriber do
 
   defp schedule_drain(%{drain_interval: :manual}), do: :ok
   defp schedule_drain(%{drain_interval: ms}), do: Process.send_after(self(), :drain, ms)
+
+  # Tells subscribers (the recording view's timeline bar) how much audio
+  # exists so far vs. where the transcription head is. Sent after every
+  # drain — while a window is mid-transcription this process is busy and
+  # emits nothing, so the bar honestly freezes until the head catches up.
+  defp broadcast_progress(state) do
+    Transcription.broadcast_live_progress(
+      state.recording_id,
+      samples_to_ms(state.next_sample),
+      state.last_committed_end_ms
+    )
+
+    state
+  end
 
   # Pull whatever the capture has produced since last time into `pending`.
   # Never lets a transient read error stall the loop — it just tries again.

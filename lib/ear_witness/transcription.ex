@@ -77,6 +77,22 @@ defmodule EarWitness.Transcription do
   end
 
   @doc """
+  Broadcasts `{:live_progress, %{captured_ms: _, transcribed_ms: _}}` to
+  `subscribe/1` listeners — how much audio the live capture has produced so
+  far versus how far behind it the transcription head is. Emitted by the
+  live transcriber on every drain tick, so the recording view can draw a
+  timeline bar during capture.
+  """
+  @spec broadcast_live_progress(integer(), non_neg_integer(), non_neg_integer()) :: :ok
+  def broadcast_live_progress(recording_id, captured_ms, transcribed_ms) do
+    Phoenix.PubSub.broadcast(
+      EarWitness.PubSub,
+      topic(recording_id),
+      {:live_progress, %{captured_ms: captured_ms, transcribed_ms: transcribed_ms}}
+    )
+  end
+
+  @doc """
   Creates the transcript row for a live capture in the `:transcribing` state.
   `EarWitness.Transcription.LiveTranscriber` appends segments to it as the
   capture is transcribed in real time; it moves to `:completed` once the

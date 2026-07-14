@@ -125,6 +125,33 @@ defmodule EarWitnessWeb.RecordingLive.Show do
             <span class="loading loading-spinner loading-xs"></span> {@transcript.status}
           </div>
           <%!--
+            Live-capture timeline: the full bar is the audio captured so far,
+            the filled part is how far the transcription head has gotten.
+            Only rendered while a live transcriber is feeding progress
+            (batch/Oban transcriptions never emit :live_progress).
+          --%>
+          <div
+            :if={@transcript && @transcript.status == :transcribing && @live_progress}
+            data-test="live-timeline"
+            class="space-y-1"
+          >
+            <progress
+              data-test="live-timeline-bar"
+              class="progress progress-primary w-full"
+              value={@live_progress.transcribed_ms}
+              max={max(@live_progress.captured_ms, 1)}
+            >
+            </progress>
+            <div class="flex justify-between text-xs opacity-60 tnum">
+              <span data-test="live-timeline-head">
+                transcribed {Format.duration(@live_progress.transcribed_ms / 1000)}
+              </span>
+              <span data-test="live-timeline-captured">
+                captured {Format.duration(@live_progress.captured_ms / 1000)}
+              </span>
+            </div>
+          </div>
+          <%!--
             Render segments whenever any exist — during a live recording they
             stream in with status :transcribing and no speaker (story 872), and
             once the recording stops + diarizes they carry speaker labels. The
@@ -176,7 +203,11 @@ defmodule EarWitnessWeb.RecordingLive.Show do
 
     {:ok,
      socket
-     |> assign(recording: recording, all_tags: Recordings.list_collections())
+     |> assign(
+       recording: recording,
+       all_tags: Recordings.list_collections(),
+       live_progress: nil
+     )
      |> assign_transcript()}
   end
 
@@ -207,6 +238,10 @@ defmodule EarWitnessWeb.RecordingLive.Show do
   @impl true
   def handle_info({:transcription_status, _status}, socket) do
     {:noreply, assign_transcript(socket)}
+  end
+
+  def handle_info({:live_progress, progress}, socket) do
+    {:noreply, assign(socket, :live_progress, progress)}
   end
 
   # Diarizes (idempotently) the moment a completed transcript is loaded, so

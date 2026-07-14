@@ -186,6 +186,21 @@ defmodule EarWitnessSpex.Fixtures do
   def enable_live_capture_seam do
     previous = Application.get_env(:ear_witness, :capture_source)
     Application.put_env(:ear_witness, :capture_source, :fixture_live)
+
+    # Kill live transcribers a previous test left running (a scenario that
+    # never drives Stop leaves its transcriber alive). The reader below is one
+    # shared queue — flush_live_transcribers/0 flushes every child, so a stale
+    # transcriber can otherwise steal the audio this test pushes.
+    EarWitness.Transcription.LiveSupervisor
+    |> DynamicSupervisor.which_children()
+    |> Enum.each(fn
+      {_, pid, _, _} when is_pid(pid) ->
+        DynamicSupervisor.terminate_child(EarWitness.Transcription.LiveSupervisor, pid)
+
+      _ ->
+        :ok
+    end)
+
     __MODULE__.FakeCaptureReader.reset()
 
     ExUnit.Callbacks.on_exit(fn ->
