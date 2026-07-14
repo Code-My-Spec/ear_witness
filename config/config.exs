@@ -1,7 +1,12 @@
 import Config
 
+# 0.12's --watch polls ancestor directories (node_modules resolution) all
+# the way to $HOME, so ANY file write anywhere near the repo triggered a
+# rebuild -> priv/static write -> live-reload -> every open page remounts.
+# In practice that was a continuous reload storm (and the wxWebView's
+# NSURLErrorCancelled -999 spam). Modern esbuild watches only real inputs.
 config :esbuild,
-  version: "0.12.18",
+  version: "0.25.4",
   default: [
     args: ~w(js/app.js --bundle --target=es2016 --outdir=../priv/static/assets),
     cd: Path.expand("../assets", __DIR__),

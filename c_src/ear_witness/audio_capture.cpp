@@ -923,16 +923,21 @@ static int on_load(ErlNifEnv *env, void ** /*priv_data*/, ERL_NIF_TERM /*load_in
   return g_capture_resource_type == nullptr ? -1 : 0;
 }
 
+// Dirty IO-bound throughout: every device call can block inside CoreAudio —
+// AudioDeviceStart in particular sits in a HALB_IOThread retry loop for
+// seconds to minutes when coreaudiod is unhealthy (observed live: a Record
+// click pinned a normal scheduler for the whole stall, wedging the VM).
+// read_new stays normal: it's a sub-ms buffer copy on a 1.5s cadence.
 static ErlNifFunc nif_funcs[] = {
-    {"list_devices", 0, nif_list_devices},
-    {"start_capture", 2, nif_start_capture},
-    {"start_loopback_capture", 1, nif_start_loopback_capture},
-    {"start_duplex_capture", 2, nif_start_duplex_capture},
-    {"stop_capture", 1, nif_stop_capture},
+    {"list_devices", 0, nif_list_devices, ERL_NIF_DIRTY_JOB_IO_BOUND},
+    {"start_capture", 2, nif_start_capture, ERL_NIF_DIRTY_JOB_IO_BOUND},
+    {"start_loopback_capture", 1, nif_start_loopback_capture, ERL_NIF_DIRTY_JOB_IO_BOUND},
+    {"start_duplex_capture", 2, nif_start_duplex_capture, ERL_NIF_DIRTY_JOB_IO_BOUND},
+    {"stop_capture", 1, nif_stop_capture, ERL_NIF_DIRTY_JOB_IO_BOUND},
     {"read_new", 1, nif_capture_read_new},
-    {"loopback_available?", 0, nif_loopback_available},
-    // Dirty IO-bound: play_wav blocks on a condition variable until the whole
-    // file has rendered, so it must not run on a normal scheduler.
+    {"loopback_available?", 0, nif_loopback_available, ERL_NIF_DIRTY_JOB_IO_BOUND},
+    // play_wav blocks on a condition variable until the whole file has
+    // rendered, so it must not run on a normal scheduler.
     {"play_wav", 1, nif_play_wav, ERL_NIF_DIRTY_JOB_IO_BOUND},
     {"play_wav_to_device", 2, nif_play_wav_to_device, ERL_NIF_DIRTY_JOB_IO_BOUND},
 };

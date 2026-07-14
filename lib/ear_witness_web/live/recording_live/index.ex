@@ -69,15 +69,28 @@ defmodule EarWitnessWeb.RecordingLive.Index do
                 queue its live transcript behind the old job — make the
                 wait visible instead.
               --%>
+              <%!--
+                phx-disable-with is client-side and instant: starting/stopping
+                the device can stall for seconds inside CoreAudio
+                (AudioDeviceStart's retry loop when coreaudiod is unhealthy),
+                and without it the button looks dead until the stall resolves.
+              --%>
               <button
                 type="button"
                 class="btn btn-primary"
                 phx-click="record"
+                phx-disable-with="Starting…"
                 disabled={@capturing? || @engine_busy?}
               >
                 <.icon name="hero-play" class="size-4" /> Record
               </button>
-              <button type="button" class="btn" phx-click="stop" disabled={!@capturing?}>
+              <button
+                type="button"
+                class="btn"
+                phx-click="stop"
+                phx-disable-with="Stopping…"
+                disabled={!@capturing?}
+              >
                 <.icon name="hero-stop" class="size-4" /> Stop
               </button>
             </div>
