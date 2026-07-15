@@ -79,9 +79,23 @@ defmodule EarWitness.Models.Catalog do
   @spec bundled_model_id() :: String.t()
   def bundled_model_id, do: Enum.find(@models, & &1.bundled).id
 
-  @doc "The absolute path a bundled model's file is shipped at."
+  @doc """
+  The absolute path a bundled model's file is shipped at.
+
+  Prefers the canonical per-user models directory (`EarWitness.models_dir()`,
+  an absolute app-data path) so the packaged app resolves the base model
+  regardless of the process's working directory. Falls back to the
+  cwd-relative repo-root `models/` location, which is where the file lives in
+  a dev checkout (`make models/ggml-base.en.bin`).
+  """
   @spec bundled_path(model()) :: String.t()
   def bundled_path(%{id: "base", bundled: true}) do
-    Path.join([File.cwd!(), "models", "ggml-base.en.bin"])
+    data_dir_path = Path.join(EarWitness.models_dir(), "ggml-base.en.bin")
+
+    if File.exists?(data_dir_path) do
+      data_dir_path
+    else
+      Path.join([File.cwd!(), "models", "ggml-base.en.bin"])
+    end
   end
 end

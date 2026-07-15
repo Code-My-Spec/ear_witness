@@ -4,6 +4,7 @@
 #include <vector>
 #include <string>
 #include <thread>
+#include <mutex>
 #include <sstream>
 #include <cstring> // strlen — libstdc++ (Linux) needs this explicitly
 
@@ -453,6 +454,18 @@ static std::string resolve_vad_model_path(const std::string &model_path)
   const std::string vad_name = "ggml-silero-v6.2.0.bin";
 
   std::vector<std::string> candidates;
+
+  // cwd-independent: the app exports its models directory at boot
+  // (EarWitnessWeb.Application) — a packaged .app launched from an
+  // arbitrary cwd must not silently lose VAD (issue 9c927854).
+  if (const char *models_dir = std::getenv("EARWITNESS_MODELS_DIR"))
+  {
+    if (models_dir[0] != '\0')
+    {
+      candidates.push_back(std::string(models_dir) + "/" + vad_name);
+    }
+  }
+
   if (!model_path.empty())
   {
     size_t slash = model_path.find_last_of("/\\");
@@ -487,12 +500,40 @@ std::string do_transcribe_files(std::vector<std::string> file_names, std::string
     params.model = model_path;
   }
 
-  whisper_context *ctx = whisper_init_from_file_with_params(params.model.c_str(), whisper_context_default_params());
+  // One cached context per model, reused across calls (issue 9c927854).
+  // The old init-per-call never freed its context — a full model (~1.6GB
+  // for large-v3) leaked per transcription, and live capture pays a call
+  // per ~20s window. Freeing per call is NOT safe either: whisper_free
+  // followed by a fresh init with VAD enabled segfaults in this vendored
+  // build (reproduced 2026-07-15), so the context lives until the model
+  // selection changes. The mutex is belt-and-braces — the Elixir-side
+  // Transcription.Gate already serializes every caller.
+  static std::mutex g_ctx_mutex;
+  static whisper_context *g_ctx = nullptr;
+  static std::string g_ctx_model_path;
 
-  if (ctx == nullptr)
+  std::lock_guard<std::mutex> ctx_lock(g_ctx_mutex);
+
+  if (g_ctx == nullptr || g_ctx_model_path != params.model)
   {
-    throw std::runtime_error("Failed to initialize whisper context");
+    if (g_ctx != nullptr)
+    {
+      whisper_free(g_ctx);
+      g_ctx = nullptr;
+      g_ctx_model_path.clear();
+    }
+
+    g_ctx = whisper_init_from_file_with_params(params.model.c_str(), whisper_context_default_params());
+
+    if (g_ctx == nullptr)
+    {
+      throw std::runtime_error("Failed to initialize whisper context");
+    }
+
+    g_ctx_model_path = params.model;
   }
+
+  whisper_context *ctx = g_ctx;
 
   // Resolve the bundled VAD model once. When present, whisper runs Voice
   // Activity Detection to segment speech before decoding — without it,
@@ -553,16 +594,8 @@ std::string do_transcribe_files(std::vector<std::string> file_names, std::string
     results << json_stream.str() << ",";
   }
 
-  // if (ctx)
-  // {
-  //   ggml_free(ctx->model.ctx);
-
-  //   ggml_backend_buffer_free(ctx->model.buffer);
-
-  //   whisper_free_state(ctx->state);
-
-  //   delete ctx;
-  // }
+  // No whisper_free here: the context is cached above and reused until the
+  // model selection changes (see issue 9c927854).
 
   std::string json_result = results.str();
   if (!json_result.empty() && json_result.back() == ',')

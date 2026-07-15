@@ -22,6 +22,11 @@ defmodule EarWitnessWeb.Application do
     File.mkdir_p!(EarWitness.transcription_id())
     File.mkdir_p!(EarWitness.models_dir())
 
+    # The whisper NIF resolves the bundled Silero VAD model through this
+    # (resolve_vad_model_path in transcribe.cpp) so a packaged app launched
+    # from an arbitrary cwd doesn't silently lose VAD (issue 9c927854).
+    System.put_env("EARWITNESS_MODELS_DIR", EarWitness.models_dir())
+
     {:ok, sup} =
       Supervisor.start_link([EarWitness.Repo], name: __MODULE__, strategy: :one_for_one)
 
