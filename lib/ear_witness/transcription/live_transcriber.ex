@@ -279,7 +279,11 @@ defmodule EarWitness.Transcription.LiveTranscriber do
     case transcribe_pcm(state, window_pcm) do
       {:ok, documents} ->
         inserted = insert_new_segments(state, documents, window_start_ms)
-        if inserted != [], do: Transcription.broadcast_status(state.recording_id, :transcribing)
+
+        # Push only the NEW segments; subscribers append. Re-broadcasting a
+        # bare status here made every view re-fetch the entire ever-growing
+        # segment list once per window (issue b4eb05e4).
+        if inserted != [], do: Transcription.broadcast_live_segments(state.recording_id, inserted)
 
         Enum.reduce(inserted, state.last_committed_end_ms, fn segment, acc ->
           max(acc, segment.end_offset)
@@ -301,10 +305,41 @@ defmodule EarWitness.Transcription.LiveTranscriber do
         end_offset: window_start_ms + (get_in(segment, ["offsets", "to"]) || 0)
       }
     end)
-    |> Enum.filter(&(&1.text != "" and &1.start_offset >= state.last_committed_end_ms))
+    |> commit_candidates(state.last_committed_end_ms)
     |> Enum.map(fn attrs ->
       {:ok, segment} = Transcription.append_segment(state.transcript_id, attrs)
       segment
+    end)
+  end
+
+  # Carry-overlap tolerance: whisper often re-emits a phrase that straddles
+  # the window boundary with a start a few hundred ms EARLIER than the last
+  # committed end (the ~2s carry gives it acoustic context to re-hear it).
+  @straddle_tolerance_ms 500
+
+  @doc """
+  The de-dup rule for live windows, pure so it's directly testable: keeps
+  segments that add new speech past `committed_end_ms`. A segment starting
+  at/after the committed end is new. A segment that STRADDLES the boundary
+  (starts up to #{@straddle_tolerance_ms}ms before it but extends past it) is
+  kept with its start clamped to the boundary — dropping it whole lost the
+  straddling speech from the transcript (issue 0787506d). Segments starting
+  further back than the tolerance are the carry re-hearing already-committed
+  speech and are dropped.
+  """
+  @spec commit_candidates(
+          [%{text: String.t(), start_offset: integer(), end_offset: integer()}],
+          non_neg_integer()
+        ) :: [%{text: String.t(), start_offset: integer(), end_offset: integer()}]
+  def commit_candidates(candidates, committed_end_ms) do
+    candidates
+    |> Enum.filter(fn %{text: text, start_offset: start_ms, end_offset: end_ms} ->
+      text != "" and
+        (start_ms >= committed_end_ms or
+           (end_ms > committed_end_ms and start_ms >= committed_end_ms - @straddle_tolerance_ms))
+    end)
+    |> Enum.map(fn attrs ->
+      %{attrs | start_offset: max(attrs.start_offset, committed_end_ms)}
     end)
   end
 

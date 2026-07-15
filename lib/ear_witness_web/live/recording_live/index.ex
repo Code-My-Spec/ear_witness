@@ -448,6 +448,12 @@ defmodule EarWitnessWeb.RecordingLive.Index do
     {:noreply, socket}
   end
 
+  # A live window committed new segments — append them; the full list was
+  # loaded once at mount/record and stays append-only until completion.
+  def handle_info({:live_segments, segments}, socket) do
+    {:noreply, update(socket, :live_segments, &(&1 ++ segments))}
+  end
+
   def handle_info({:transcription_activity, %{busy: busy}}, socket) do
     {:noreply, assign(socket, :engine_busy?, busy)}
   end

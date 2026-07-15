@@ -244,6 +244,19 @@ defmodule EarWitnessWeb.RecordingLive.Show do
     {:noreply, assign(socket, :live_progress, progress)}
   end
 
+  # A live window committed new segments — append to the loaded transcript
+  # instead of re-fetching the whole list (it grows per window). No-op when
+  # no transcript is loaded yet; the next full load picks everything up.
+  def handle_info({:live_segments, segments}, socket) do
+    case socket.assigns.transcript do
+      %{segments: existing} = transcript ->
+        {:noreply, assign(socket, :transcript, %{transcript | segments: existing ++ segments})}
+
+      _ ->
+        {:noreply, socket}
+    end
+  end
+
   # The "transcription:<id>" topic multiplexes message shapes; a future shape
   # must not crash this view (index.ex has the same fallthrough).
   def handle_info(_msg, socket), do: {:noreply, socket}

@@ -119,6 +119,22 @@ defmodule EarWitness.Transcription do
   end
 
   @doc """
+  Broadcasts `{:live_segments, [%Segment{}]}` — ONLY the segments a live
+  window just committed, so subscribed views append instead of re-fetching
+  the whole ever-growing list once per window. Completion/diarization still
+  go out as `{:transcription_status, _}` (a one-shot full re-fetch is fine
+  there).
+  """
+  @spec broadcast_live_segments(integer(), [Segment.t()]) :: :ok
+  def broadcast_live_segments(recording_id, segments) do
+    Phoenix.PubSub.broadcast(
+      EarWitness.PubSub,
+      topic(recording_id),
+      {:live_segments, segments}
+    )
+  end
+
+  @doc """
   Broadcasts `{:live_progress, %{captured_ms: _, transcribed_ms: _}}` to
   `subscribe/1` listeners — how much audio the live capture has produced so
   far versus how far behind it the transcription head is. Emitted by the
