@@ -1,37 +1,89 @@
 # Windows build (nmake). elixir_make runs `nmake /F Makefile.win` on Windows.
 #
-# The whisper.cpp transcription NIF is a gcc/CMake build that targets Unix
-# toolchains; building it on Windows (MSVC vs mingw, ERTS import libs) is a
-# separate effort, and transcription is already unavailable in releases until
-# the whisper model is bundled. So that NIF stays a no-op here: the app and
-# installer build without it, and EarWitness.Transcribe tolerates its
-# absence. Real Windows transcription is tracked with the model work.
+# Builds BOTH native NIFs:
+#   - audio_capture_nif.dll — the miniaudio capture NIF (dependency-free).
+#   - nif.dll               — the whisper.cpp transcription NIF.
 #
-# The miniaudio capture NIF (c_src/ear_witness/audio_capture.cpp) is a much
-# smaller, dependency-free build by comparison — no CMake/ggml tree, just
-# the vendored c_src/miniaudio.h, which documents that Windows "should
-# compile cleanly on all popular compilers without the need to configure
-# any include paths nor link to any libraries." It also needs no ERTS
-# import library: erl_nif.h resolves every enif_* call on Windows through
-# a VM-supplied callback table (see ERL_NIF_INIT / WinDynNifCallbacks in
-# erl_nif.h) rather than ordinary DLL-import linking, which is the "ERTS
-# import libs" problem the whisper NIF punts on above. So this file does
-# attempt to build it below — see the miniaudio-capture ADR.
+# The whisper NIF was previously skipped on Windows ("MSVC vs mingw, ERTS
+# import libs, a separate effort"). The ERTS-import-lib worry turned out to
+# be a non-issue: erl_nif.h resolves every enif_* call on Windows through a
+# VM-supplied callback table (ERL_NIF_INIT / WinDynNifCallbacks), not
+# ordinary DLL-import linking — which is exactly why the capture NIF already
+# links with `/DLL` and no ERTS import library. The whisper NIF (nif.cpp)
+# uses the same ERL_NIF_INIT, so it links the same way. All that was left was
+# building whisper.cpp's static libs with CMake/MSVC and linking them in,
+# which is what this file now does — mirroring the Unix Makefile's CPU-only
+# (Linux) configuration: no Metal, no BLAS, no OpenMP.
 #
-# UNVALIDATED: written without access to a Windows/MSVC toolchain — nobody
-# has compiled, linked, or run this on real Windows yet. Windows CI is
-# `workflow_dispatch`-only (see .github/workflows/windows-installer.yml)
-# specifically so this gets a real build-and-smoke-test before it's
-# trusted; do not switch that workflow to push/tags until it has.
+# CRT: CMake defaults MSVC Release to the dynamic runtime (/MD); the NIF
+# objects below compile with /MD too so the CRT matches at link time.
 
 BUILDDIR = priv
 SOURCEDIR = c_src\ear_witness
+
+# --- whisper.cpp (cloned at a pinned tag, built to static libs) ------------
+WHISPER_DIR = c_src\ear_witness\whisper.cpp
+WHISPER_BUILD = $(WHISPER_DIR)\build
+WHISPER_REPO = https://github.com/ggml-org/whisper.cpp.git
+WHISPER_TAG = v1.9.1
+# The lib that marks "whisper built". Static-lib output mirrors the Unix
+# layout (build\src, build\ggml\src) since this is a single-config generator.
+WHISPER_LIB = $(WHISPER_BUILD)\src\whisper.lib
+# ggml-cpu reads the registry for CPU feature detection (RegOpenKeyExA etc.),
+# which lives in advapi32.lib — not in the default link set.
+WHISPER_LIBS = $(WHISPER_BUILD)\src\whisper.lib \
+	$(WHISPER_BUILD)\ggml\src\ggml.lib \
+	$(WHISPER_BUILD)\ggml\src\ggml-cpu.lib \
+	$(WHISPER_BUILD)\ggml\src\ggml-base.lib \
+	advapi32.lib
+
+# --- whisper transcription NIF ---------------------------------------------
+TARGET = $(BUILDDIR)\nif.dll
+NIF_OBJS = $(BUILDDIR)\nif.obj $(BUILDDIR)\transcribe.obj
+NIF_CXXFLAGS = /nologo /EHsc /std:c++17 /MD /D_CRT_SECURE_NO_WARNINGS \
+	/I"$(ERTS_INCLUDE_DIR)" /I"$(WHISPER_DIR)\include" /I"$(WHISPER_DIR)\ggml\include"
+
+# --- miniaudio capture NIF -------------------------------------------------
 AUDIO_TARGET = $(BUILDDIR)\audio_capture_nif.dll
 AUDIO_OBJ = $(BUILDDIR)\audio_capture.obj
 
-all: $(AUDIO_TARGET)
-	@echo Skipping native whisper NIF on Windows (transcription unavailable in this build).
+all: $(AUDIO_TARGET) $(TARGET)
 
+# Clone whisper.cpp at the pinned tag (not committed — too large).
+$(WHISPER_DIR)\CMakeLists.txt:
+	git clone --depth 1 --branch $(WHISPER_TAG) $(WHISPER_REPO) $(WHISPER_DIR)
+
+# Build whisper's static libraries. NMake Makefiles generator: single-config
+# (predictable output paths, no Release\ subdir) and needs only the nmake we
+# already run under. CPU-only to match the Linux link configuration.
+$(WHISPER_LIB): $(WHISPER_DIR)\CMakeLists.txt
+	cmake -S $(WHISPER_DIR) -B $(WHISPER_BUILD) -G "NMake Makefiles" \
+		-DCMAKE_BUILD_TYPE=Release \
+		-DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreadedDLL \
+		-DBUILD_SHARED_LIBS=OFF \
+		-DGGML_METAL=OFF \
+		-DGGML_BLAS=OFF \
+		-DGGML_OPENMP=OFF \
+		-DWHISPER_BUILD_EXAMPLES=OFF \
+		-DWHISPER_BUILD_TESTS=OFF
+	cmake --build $(WHISPER_BUILD)
+
+# Link the whisper NIF DLL. enif_* resolve through the VM callback table (see
+# the header comment), so no ERTS import library is needed — just the whisper
+# static libs.
+$(TARGET): $(NIF_OBJS) $(WHISPER_LIB)
+	link /nologo /DLL /OUT:$(TARGET) $(NIF_OBJS) $(WHISPER_LIBS)
+
+$(BUILDDIR)\nif.obj: $(SOURCEDIR)\nif.cpp
+	if not exist $(BUILDDIR) mkdir $(BUILDDIR)
+	cl $(NIF_CXXFLAGS) /c $(SOURCEDIR)\nif.cpp /Fo$(BUILDDIR)\nif.obj
+
+# transcribe.cpp includes whisper.h, so it needs the clone present first.
+$(BUILDDIR)\transcribe.obj: $(SOURCEDIR)\transcribe.cpp $(WHISPER_DIR)\CMakeLists.txt
+	if not exist $(BUILDDIR) mkdir $(BUILDDIR)
+	cl $(NIF_CXXFLAGS) /c $(SOURCEDIR)\transcribe.cpp /Fo$(BUILDDIR)\transcribe.obj
+
+# --- capture NIF (unchanged: builds cleanly on MSVC, no whisper dependency) -
 $(AUDIO_TARGET): $(AUDIO_OBJ)
 	link /nologo /DLL /OUT:$(AUDIO_TARGET) $(AUDIO_OBJ)
 
@@ -40,5 +92,5 @@ $(AUDIO_OBJ): $(SOURCEDIR)\audio_capture.cpp
 	cl /nologo /EHsc /std:c++17 /I"$(ERTS_INCLUDE_DIR)" /c $(SOURCEDIR)\audio_capture.cpp /Fo$(AUDIO_OBJ)
 
 clean:
-	@echo Nothing to clean.
-	-del /Q $(AUDIO_OBJ) $(AUDIO_TARGET) 2>nul
+	-del /Q $(BUILDDIR)\*.obj $(TARGET) $(AUDIO_TARGET) 2>nul
+	-rmdir /S /Q $(WHISPER_BUILD) 2>nul

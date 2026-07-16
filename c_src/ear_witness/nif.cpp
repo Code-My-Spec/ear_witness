@@ -4,7 +4,11 @@
 #include <iostream>
 #include <vector>
 
-extern const std::string do_transcribe_files(std::vector<std::string> file_names, std::string model_path);
+// No top-level `const` on the return type: it's meaningless on a by-value
+// return, and MSVC folds it into the mangled symbol name (Itanium/Clang/GCC
+// ignore it), so a `const` here wouldn't match transcribe.cpp's definition
+// and the Windows link fails with an unresolved external.
+extern std::string do_transcribe_files(std::vector<std::string> file_names, std::string model_path);
 
 static ERL_NIF_TERM transcribe_files(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 {
