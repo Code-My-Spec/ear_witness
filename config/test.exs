@@ -45,6 +45,11 @@ config :ear_witness,
   diarizer: EarWitnessTest.RecordedDiarizer,
   capture_source: :fixture,
   bot_relay: EarWitnessTest.PendingBotRelay,
+  # The :announce consent policy plays a real audible notice through the
+  # virtual-mic device (EarWitness.Audio.ConsentPolicy). Tests have no such
+  # device, so default the delivery seam to success;
+  # simulate_announcement_delivery_failure/0 flips it to :fail per test.
+  announcement_delivery_override: :ok,
   # Live-transcription spec seam (story 872). Inert unless a spec opts into the
   # `:fixture_live` capture (EarWitnessSpex.Fixtures.enable_live_capture_seam/0):
   # the LiveTranscriber then drains a controllable stand-in instead of the NIF,

@@ -59,10 +59,13 @@ defmodule EarWitnessSpex.Fixtures do
   duration of the current test only.
   """
   def simulate_announcement_delivery_failure do
+    previous = Application.get_env(:ear_witness, :announcement_delivery_override)
     Application.put_env(:ear_witness, :announcement_delivery_override, :fail)
 
+    # Restore the prior value (`:ok` in test) rather than deleting it, so a
+    # later announce test doesn't fall through to the real device call.
     ExUnit.Callbacks.on_exit(fn ->
-      Application.delete_env(:ear_witness, :announcement_delivery_override)
+      Application.put_env(:ear_witness, :announcement_delivery_override, previous)
     end)
   end
 

@@ -341,33 +341,51 @@ bool read_wav_s16(const std::string &path, std::vector<ma_int16> *out) {
     return false;
   }
 
-  unsigned char header[44];
-  if (std::fread(header, 1, sizeof(header), file) != sizeof(header)) {
+  // RIFF/WAVE preamble (12 bytes): "RIFF" <size> "WAVE".
+  unsigned char riff[12];
+  if (std::fread(riff, 1, sizeof(riff), file) != sizeof(riff) ||
+      std::memcmp(riff + 0, "RIFF", 4) != 0 || std::memcmp(riff + 8, "WAVE", 4) != 0) {
     std::fclose(file);
     return false;
   }
 
-  if (std::memcmp(header + 0, "RIFF", 4) != 0 || std::memcmp(header + 8, "WAVE", 4) != 0 ||
-      std::memcmp(header + 36, "data", 4) != 0) {
-    std::fclose(file);
-    return false;
+  // Walk the chunk list to find "data" — the app's own captures write a
+  // canonical 44-byte header (data at offset 36), but a bundled/external clip
+  // (e.g. the recording-notice WAV from ffmpeg) may carry a LIST/INFO or fmt
+  // extension chunk first. Skipping unknown chunks makes this read any valid
+  // PCM16 WAV, not only our own writer's layout.
+  while (true) {
+    unsigned char chunk[8];
+    if (std::fread(chunk, 1, sizeof(chunk), file) != sizeof(chunk)) {
+      std::fclose(file);
+      return false;  // ran off the end without a data chunk
+    }
+
+    uint32_t chunk_size = static_cast<uint32_t>(chunk[4]) | (static_cast<uint32_t>(chunk[5]) << 8) |
+                          (static_cast<uint32_t>(chunk[6]) << 16) |
+                          (static_cast<uint32_t>(chunk[7]) << 24);
+
+    if (std::memcmp(chunk, "data", 4) == 0) {
+      size_t frame_count = chunk_size / sizeof(ma_int16);
+      out->resize(frame_count);
+      if (frame_count > 0) {
+        size_t read = std::fread(out->data(), sizeof(ma_int16), frame_count, file);
+        // Tolerate a data-size field that overshoots the bytes actually
+        // present (e.g. a capture killed mid-finalize) — play what landed.
+        out->resize(read);
+      }
+      std::fclose(file);
+      return true;
+    }
+
+    // Skip this chunk's body; RIFF chunks are word-aligned, so an odd size is
+    // followed by a pad byte.
+    long skip = static_cast<long>(chunk_size) + (chunk_size & 1);
+    if (std::fseek(file, skip, SEEK_CUR) != 0) {
+      std::fclose(file);
+      return false;
+    }
   }
-
-  uint32_t data_size = static_cast<uint32_t>(header[40]) | (static_cast<uint32_t>(header[41]) << 8) |
-                       (static_cast<uint32_t>(header[42]) << 16) |
-                       (static_cast<uint32_t>(header[43]) << 24);
-
-  size_t frame_count = data_size / sizeof(ma_int16);
-  out->resize(frame_count);
-  if (frame_count > 0) {
-    size_t read = std::fread(out->data(), sizeof(ma_int16), frame_count, file);
-    // Tolerate a data-size field that overshoots the bytes actually present
-    // (e.g. a capture killed mid-finalize) — play whatever really landed.
-    out->resize(read);
-  }
-
-  std::fclose(file);
-  return true;
 }
 
 // Drives one blocking playback to completion. Lives on the calling (dirty)
