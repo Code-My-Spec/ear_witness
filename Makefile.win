@@ -29,10 +29,13 @@ WHISPER_TAG = v1.9.1
 # The lib that marks "whisper built". Static-lib output mirrors the Unix
 # layout (build\src, build\ggml\src) since this is a single-config generator.
 WHISPER_LIB = $(WHISPER_BUILD)\src\whisper.lib
+# ggml-cpu reads the registry for CPU feature detection (RegOpenKeyExA etc.),
+# which lives in advapi32.lib — not in the default link set.
 WHISPER_LIBS = $(WHISPER_BUILD)\src\whisper.lib \
 	$(WHISPER_BUILD)\ggml\src\ggml.lib \
 	$(WHISPER_BUILD)\ggml\src\ggml-cpu.lib \
-	$(WHISPER_BUILD)\ggml\src\ggml-base.lib
+	$(WHISPER_BUILD)\ggml\src\ggml-base.lib \
+	advapi32.lib
 
 # --- whisper transcription NIF ---------------------------------------------
 TARGET = $(BUILDDIR)\nif.dll
