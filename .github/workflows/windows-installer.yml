@@ -6,8 +6,11 @@ name: "Windows Installer"
 # Notes:
 # - The official Windows OTP ships a working wx (verified), so no wxWidgets
 #   build is needed here.
-# - The whisper transcription NIF is skipped on Windows (no-op Makefile.win);
-#   transcription is unavailable until the model work lands, same as elsewhere.
+# - The whisper transcription NIF is now built on Windows (Makefile.win builds
+#   whisper.cpp's static libs via CMake/MSVC and links priv\nif.dll). The
+#   "Verify the whisper NIF loads" step below smoke-tests that it initializes.
+#   As elsewhere, the whisper model itself is downloaded at first run, not
+#   bundled.
 on:
   # Auto-publish re-enabled: the miniaudio capture NIF (which replaced
   # Membrane/shmex — see the miniaudio-capture ADR) has now been exercised on
@@ -85,6 +88,36 @@ jobs:
           mix assets.setup
           mix assets.deploy
           mix desktop.installer
+
+      - name: Verify the whisper NIF loads
+        shell: pwsh
+        env:
+          MIX_ENV: prod
+        run: |
+          # Prove priv\nif.dll actually loaded, not that it merely compiled.
+          # transcribe_files/2 with a non-list first arg hits the NIF's argument
+          # check and raises ArgumentError (badarg) BEFORE any whisper/model
+          # work — so this needs no model. The Elixir stub, by contrast, would
+          # exit(:nif_library_not_loaded). Distinguishing the two proves the
+          # native library initialized.
+          $code = @'
+          probe = fn ->
+            try do
+              EarWitness.Transcribe.transcribe_files(:not_a_list, "")
+              :returned_without_raising
+            rescue
+              ArgumentError -> :nif_loaded
+            catch
+              :exit, :nif_library_not_loaded -> :stub_not_loaded
+              kind, reason -> {:unexpected, kind, reason}
+            end
+          end
+          result = probe.()
+          IO.puts("nif probe: #{inspect(result)}")
+          if result != :nif_loaded, do: System.halt(1)
+          '@
+          $code | Out-File -FilePath nif_probe.exs -Encoding utf8
+          mix run --no-start nif_probe.exs
 
       - name: Locate the .exe installer
         shell: pwsh
