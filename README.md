@@ -16,6 +16,24 @@ EarWitness runs as a native desktop app ([elixir-desktop](https://github.com/eli
 
 Transcripts land as plain text files in `~/Documents/Discussit/transcripts`.
 
+## Recording notice (announce policy)
+
+EarWitness has three consent policies for a capture (Settings → consent policy):
+
+- **silent** — record with no notice.
+- **notify** — record and show an on-screen "recording" notice.
+- **announce** — play an *audible* recording notice onto your outgoing voice channel **before** recording starts, so remote participants on a call actually hear it. Capture is refused if the notice can't be delivered.
+
+The audible notice is delivered through the **"EarWitness Microphone" virtual audio driver** — a macOS Core Audio HAL plug-in that a meeting app (Zoom / Teams / Meet) selects as its microphone. EarWitness plays the bundled notice clip (`priv/audio/recording-notice.wav`) into the device and the meeting hears it live (see [`native/vmic-macos/README.md`](native/vmic-macos/README.md)).
+
+> **The driver is a separate, machine-wide install — the app installer does _not_ install it.** Without the driver, the **announce** policy fails closed (capture is refused with a "notice couldn't be delivered" message); **silent** and **notify** are unaffected. To enable announce:
+>
+> ```bash
+> cd native/vmic-macos
+> ./build.sh
+> sudo ./install.sh   # copies the driver into /Library/Audio/Plug-Ins/HAL and restarts coreaudiod
+> ```
+
 ## Requirements
 
 - Erlang/OTP 29 and Elixir 1.20 (see `.tool-versions`; both via [asdf](https://asdf-vm.com/))
@@ -70,7 +88,9 @@ mix test
 | `lib/ear_witness/transcription/` | GenServer driving the whisper.cpp NIF |
 | `lib/ear_witness_web/` | Phoenix/LiveView UI shown in the desktop webview |
 | `c_src/ear_witness/` | Transcription NIF (whisper.cpp is cloned here by `make`, not committed) |
-| `priv/models/` | Silero VAD and pyannote segmentation ONNX models |
+| `priv/models/` | Silero VAD and pyannote segmentation ONNX models (bundled) |
+| `priv/audio/` | The bundled recording-notice clip played by the announce policy |
+| `native/vmic-macos/` | The "EarWitness Microphone" virtual audio driver (build + install) |
 | `segmentation.livemd` | Livebook for exploring the segmentation model output |
 
 ---
